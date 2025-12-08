@@ -661,11 +661,15 @@ export const DinoGame: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) => 
       }
   };
 
+// Внутри DinoGame...
+
+// ... (код drawDino, drawCactus, start, loop остается прежним) ...
+
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
         const code = e.code;
         if (['ArrowUp','ArrowDown','Space','KeyW','KeyS'].includes(code)) e.preventDefault();
-
+        // Логика старта и прыжка
         if ((code === 'Space' || code === 'ArrowUp' || code === 'KeyW') && !gameState.current.isPlaying) {
              start();
              return;
@@ -674,6 +678,67 @@ export const DinoGame: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) => 
             if (code === 'KeyR') start();
             return;
         }
+        if (code === 'Space' || code === 'ArrowUp' || code === 'KeyW') jump();
+        if (code === 'ArrowDown' || code === 'KeyS') gameState.current.dino.ducking = true;
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+        if (e.code === 'ArrowDown' || e.code === 'KeyS') gameState.current.dino.ducking = false;
+    };
+
+    // ДОБАВЛЕНО: Обработка касания экрана (для телефона)
+    const handleTouchStart = (e: TouchEvent) => {
+        e.preventDefault(); // Чтобы экран не скроллился при тапе
+        if (!gameState.current.isPlaying) {
+            start();
+        } else {
+            jump();
+        }
+    };
+
+    window.addEventListener('keydown', handleKey);
+    window.addEventListener('keyup', handleKeyUp);
+    // Вешаем слушатель на сам канвас
+    const canvas = canvasRef.current;
+    if (canvas) canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    
+    // ... (код отрисовки начального экрана остается) ...
+    setTimeout(() => {
+        if(canvasRef.current) {
+            const ctx = canvasRef.current.getContext('2d');
+            if(ctx) {
+                // ... (тут твой код отрисовки старта) ...
+                ctx.fillStyle = isSakura ? '#fce7f3' : '#1a1c29';
+                ctx.fillRect(0,0,canvasRef.current.width, canvasRef.current.height);
+                ctx.fillStyle = isSakura ? '#be185d' : '#fff';
+                ctx.font = '20px monospace';
+                // Пишем универсальный текст
+                ctx.fillText("Press Space or Tap to Jump", 150, 130); 
+                drawDino(ctx, 50, 250 - 20 - 44, 40, 44, false, 0);
+                ctx.fillStyle = isSakura ? '#db2777' : '#535353';
+                ctx.fillRect(0, 250 - 20, 600, 2);
+            }
+        }
+    }, 100);
+
+    return () => {
+        window.removeEventListener('keydown', handleKey);
+        window.removeEventListener('keyup', handleKeyUp);
+        if (canvas) canvas.removeEventListener('touchstart', handleTouchStart);
+        cancelAnimationFrame(reqRef.current);
+    };
+  }, [theme]);
+
+  return (
+    // ИЗМЕНЕНИЕ: Добавлены классы w-full h-auto для адаптивности
+    <canvas 
+        ref={canvasRef} 
+        width={600} 
+        height={250} 
+        className={`rounded-xl border shadow-2xl cursor-pointer w-full h-auto object-contain max-w-[900px] touch-none ${isSakura ? 'border-pink-300 bg-pink-50' : 'border-white/10 bg-[#1a1c29]'}`}
+        onClick={start} // Оставляем клик для мышки
+    />
+  );
 
         if (code === 'Space' || code === 'ArrowUp' || code === 'KeyW') jump();
         if (code === 'ArrowDown' || code === 'KeyS') gameState.current.dino.ducking = true;
