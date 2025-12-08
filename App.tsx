@@ -34,7 +34,7 @@ const App: React.FC = () => {
     activeBoosts: [],
     hasChangedName: false,
   });
-  const [coins, setCoins] = useState(1500);
+  const [coins, setCoins] = useState(10000); // Initial capital set to 10000
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
   // App State
