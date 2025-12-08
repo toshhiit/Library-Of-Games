@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { RefreshCw, MousePointer2, Timer, Crown, Flag, Bomb, Eraser, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -265,7 +264,7 @@ export const SnakeGame: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) =>
     const isSakura = theme === 'sakura';
 
     const spawnFood = useCallback(() => {
-        let newFood;
+        let newFood = { x: 0, y: 0 }; // Исправлено: инициализация переменной
         while(true) {
             newFood = {
                 x: Math.floor(Math.random() * GRID_SIZE),
@@ -1604,7 +1603,7 @@ export const SolitaireGame: React.FC = () => {
                          const n = [...prev];
                          n[idx].push(card);
                          return n;
-                     });
+                         });
                      setWaste(prev => prev.slice(0, -1));
                      setSelected(null);
                  } else {
