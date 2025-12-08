@@ -17,23 +17,21 @@ const Drawer: React.FC<DrawerProps> = ({ isOpen, onClose, position, title, child
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Backdrop */}
+          {/* Backdrop (Затемнение фона) */}
           <motion.div
-            initial={{ x: isLeft ? '-100%' : '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: isLeft ? '-100%' : '100%' }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            // ИЗМЕНЕНИЕ: w-[85vw] для телефонов (ширина 85% экрана), sm:w-[350px] для ПК
-            className={`fixed top-0 bottom-0 ${isLeft ? 'left-0' : 'right-0'} w-[85vw] sm:w-[350px] bg-header shadow-2xl z-[70] border-l border-white/5 flex flex-col`}
-          >
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="fixed inset-0 bg-black/50 z-[60] backdrop-blur-sm"
+          />
           
-          {/* Panel */}
+          {/* Panel (Сама панель) */}
           <motion.div
             initial={{ x: isLeft ? '-100%' : '100%' }}
             animate={{ x: 0 }}
             exit={{ x: isLeft ? '-100%' : '100%' }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            // ИЗМЕНЕНИЕ: w-[85vw] для телефонов (ширина 85% экрана), sm:w-[350px] для ПК
             className={`fixed top-0 bottom-0 ${isLeft ? 'left-0' : 'right-0'} w-[85vw] sm:w-[350px] bg-header shadow-2xl z-[70] border-l border-white/5 flex flex-col`}
           >
             <div className="p-5 border-b border-white/5 flex justify-between items-center">
@@ -46,7 +44,7 @@ const Drawer: React.FC<DrawerProps> = ({ isOpen, onClose, position, title, child
               </button>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-5 flex flex-col">
+            <div className="flex-1 overflow-y-auto p-5 flex flex-col custom-scrollbar">
               {children}
             </div>
           </motion.div>
