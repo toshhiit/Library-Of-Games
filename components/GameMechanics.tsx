@@ -1552,7 +1552,9 @@ export const TetrisGame: React.FC = () => {
             ref={canvasRef} 
             width={COLS * BLOCK_SIZE} 
             height={ROWS * BLOCK_SIZE} 
-            className="rounded-lg shadow-2xl border border-white/10"
+            // ИЗМЕНЕНИЕ: style={{ width: '100%', height: 'auto', maxWidth: '300px' }}
+            // Тетрис узкий, ему лучше ограничить ширину, чтобы не раздувался на весь монитор
+            className="rounded-lg shadow-2xl border border-white/10 w-full h-auto max-w-[300px] touch-none"
         />
     );
 };
