@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Menu, 
@@ -25,8 +24,9 @@ import Shop from './components/Shop';
 const App: React.FC = () => {
   // User State
   const [user, setUser] = useState<UserProfile>({
-    tgUsername: '@gamer_tg',
-    displayName: 'Игрок #1459',
+    tgId: undefined,
+    tgUsername: '@loading...',
+    displayName: 'Guest Player',
     avatar: AVAILABLE_AVATARS[0].url,
     unlockedAvatars: ['default'],
     inventory: [],
@@ -34,7 +34,8 @@ const App: React.FC = () => {
     activeBoosts: [],
     hasChangedName: false,
   });
-  const [coins, setCoins] = useState(10000); // Initial capital set to 10000
+  
+  const [coins, setCoins] = useState(10000); 
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
   // App State
@@ -49,6 +50,56 @@ const App: React.FC = () => {
   const [filter, setFilter] = useState<FilterType>('all');
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
+
+  // --- TELEGRAM & BACKEND AUTH INITIALIZATION ---
+  useEffect(() => {
+    // 1. Check for Backend Session (Auth Flow)
+    const sessionId = localStorage.getItem('session_id');
+    if (sessionId) {
+      fetch(`/api/user?session=${sessionId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setUser(prev => ({
+              ...prev,
+              tgId: data.tg_id,
+              tgUsername: data.username ? `@${data.username}` : 'Player',
+              displayName: data.username || 'Player',
+            }));
+            if (data.coins !== undefined) setCoins(data.coins);
+          }
+        })
+        .catch(err => console.error("API Auth Error:", err));
+    }
+
+    // 2. Standard Telegram WebApp Init (Visuals & Fallback)
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+        tg.ready();
+        tg.expand(); // Open full height
+        
+        // Define theme colors for Telegram header to match app
+        try {
+           tg.headerColor = '#212233';
+           tg.backgroundColor = '#0C0D14';
+        } catch (e) {
+            console.error("Error setting TG colors", e);
+        }
+
+        const tgUser = tg.initDataUnsafe?.user;
+
+        // Only use WebApp data if we didn't get data from our Backend API already
+        // Or simple visual updates
+        if (tgUser && !sessionId) {
+            setUser(prev => ({
+                ...prev,
+                tgId: tgUser.id,
+                tgUsername: tgUser.username ? `@${tgUser.username}` : 'No Username',
+                displayName: tgUser.first_name + (tgUser.last_name ? ` ${tgUser.last_name}` : ''),
+            }));
+        }
+    }
+  }, []);
 
   // Derived State
   const filteredGames = GAMES.filter(game => {
@@ -66,12 +117,25 @@ const App: React.FC = () => {
   const isSakura = user.activeTheme === 'sakura';
 
   // Handlers
-  const handleAddCoins = (amount: number) => setCoins(prev => prev + amount);
+  const handleAddCoins = (amount: number) => {
+      setCoins(prev => prev + amount);
+      // Haptic feedback if in Telegram
+      if(window.Telegram?.WebApp?.HapticFeedback) {
+          window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+      }
+  };
   
   const handleSpendCoins = (amount: number): boolean => {
     if (coins >= amount) {
       setCoins(prev => prev - amount);
+      // Haptic feedback if in Telegram
+      if(window.Telegram?.WebApp?.HapticFeedback) {
+          window.Telegram.WebApp.HapticFeedback.selectionChanged();
+      }
       return true;
+    }
+    if(window.Telegram?.WebApp?.HapticFeedback) {
+        window.Telegram.WebApp.HapticFeedback.notificationOccurred('error');
     }
     return false;
   };
@@ -90,10 +154,16 @@ const App: React.FC = () => {
     setShowSearchResults(false);
     setSearchQuery(''); 
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    if(window.Telegram?.WebApp?.HapticFeedback) {
+        window.Telegram.WebApp.HapticFeedback.selectionChanged();
+    }
   };
 
   const handleBackToGrid = () => {
     setSelectedGame(null);
+    if(window.Telegram?.WebApp?.HapticFeedback) {
+        window.Telegram.WebApp.HapticFeedback.selectionChanged();
+    }
   };
 
   const toggleFavorite = (e: React.MouseEvent, gameId: string) => {
@@ -104,6 +174,9 @@ const App: React.FC = () => {
       else next.add(gameId);
       return next;
     });
+    if(window.Telegram?.WebApp?.HapticFeedback) {
+        window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+    }
   };
 
   // Reset settings/shop mode when closing drawers
@@ -382,6 +455,7 @@ const App: React.FC = () => {
               </div>
               <h3 className="text-2xl font-bold">{user.displayName}</h3>
               <p className="text-textMuted">{user.tgUsername}</p>
+              {user.tgId && <p className="text-xs text-textMuted/50 mt-1">ID: {user.tgId}</p>}
             </div>
 
             {/* Stats */}
@@ -415,17 +489,19 @@ const App: React.FC = () => {
 
             {/* Telegram Auth Badge (Sticky Bottom) */}
             <div className="mt-auto pt-6">
-              <div className="bg-[#2AABEE]/10 border border-[#2AABEE]/30 rounded-2xl p-4 flex items-center gap-4">
+              <div className={`bg-[#2AABEE]/10 border border-[#2AABEE]/30 rounded-2xl p-4 flex items-center gap-4 transition-opacity ${user.tgId ? 'opacity-100' : 'opacity-50'}`}>
                  <div className="w-10 h-10 rounded-full bg-[#2AABEE] flex items-center justify-center shrink-0 shadow-lg shadow-blue-500/20">
                     <Send size={20} className="text-white ml-[-2px] mt-[1px]" />
                  </div>
                  <div>
-                   <div className="text-xs text-[#2AABEE] font-bold uppercase tracking-wider mb-0.5">Авторизован</div>
+                   <div className="text-xs text-[#2AABEE] font-bold uppercase tracking-wider mb-0.5">
+                     {user.tgId ? 'Авторизован' : 'Демо режим'}
+                   </div>
                    <div className="text-sm font-medium">через Telegram</div>
                  </div>
-                 <div className="ml-auto w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"></div>
+                 {user.tgId && <div className="ml-auto w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"></div>}
               </div>
-              <p className="text-center text-[10px] text-textMuted mt-3 opacity-60">ID: 55902301 • v1.2.0</p>
+              <p className="text-center text-[10px] text-textMuted mt-3 opacity-60">LibraryOfGames v1.3.0</p>
             </div>
           </div>
         )}
