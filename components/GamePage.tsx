@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Maximize2, Info, Keyboard, RotateCcw, ArrowUp, ArrowDown, ArrowRight } from 'lucide-react';
@@ -10,22 +9,25 @@ interface GamePageProps {
   theme?: ThemeType;
   onBack: () => void;
   onEarnCoins: (amount: number) => void;
+  // ДОБАВЛЕНО: Новый проп для сохранения счета
+  onSaveScore: (gameId: string, score: number) => void;
 }
 
-const GamePage: React.FC<GamePageProps> = ({ game, theme = 'default', onBack, onEarnCoins }) => {
+const GamePage: React.FC<GamePageProps> = ({ game, theme = 'default', onBack, onEarnCoins, onSaveScore }) => {
   const [isPlaying, setIsPlaying] = useState(false);
 
   const renderGame = () => {
+    // Обновлено: Пробрасываем game.id и onSaveScore в игры со счетом
     switch (game.name) {
-      case '2048': return <Game2048 theme={theme} />;
-      case 'Snake': return <SnakeGame theme={theme} />;
-      case 'Dino Run': return <DinoGame theme={theme} />;
-      case 'Clicker': return <ClickerGame onEarnCoins={onEarnCoins} />;
-      case 'Сапёр': return <MinesweeperGame />;
-      case 'Шашки': return <CheckersGame />;
-      case 'Paint': return <PaintGame />;
-      case 'Tetris': return <TetrisGame />;
-      case 'Пасьянс': return <SolitaireGame />;
+      case '2048': return <Game2048 theme={theme} gameId={game.id} onSaveScore={onSaveScore} />;
+      case 'Snake': return <SnakeGame theme={theme} gameId={game.id} onSaveScore={onSaveScore} />;
+      case 'Dino Run': return <DinoGame theme={theme} gameId={game.id} onSaveScore={onSaveScore} />;
+      case 'Clicker': return <ClickerGame onEarnCoins={onEarnCoins} gameId={game.id} onSaveScore={onSaveScore} />;
+      case 'Сапёр': return <MinesweeperGame gameId={game.id} onSaveScore={onSaveScore} />;
+      case 'Шашки': return <CheckersGame />; // Без счета
+      case 'Paint': return <PaintGame />;     // Без счета
+      case 'Tetris': return <TetrisGame gameId={game.id} onSaveScore={onSaveScore} />;
+      case 'Пасьянс': return <SolitaireGame />; // Без счета
       default: return (
         <div className="flex flex-col items-center justify-center h-full text-textMuted">
           <p>Игра в разработке...</p>
