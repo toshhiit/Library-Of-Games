@@ -16,7 +16,8 @@ type Tile = {
   toDelete?: boolean;
 };
 
-export const Game2048: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) => {
+// ДОБАВЛЕНО: gameId и onSaveScore
+export const Game2048: React.FC<{theme?: ThemeType, gameId: string, onSaveScore: (gameId: string, score: number) => void}> = ({theme = 'default', gameId, onSaveScore}) => {
   const [tiles, setTiles] = useState<Tile[]>([]);
   const [score, setScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
@@ -83,7 +84,9 @@ export const Game2048: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) => 
       };
       
       const changes: Tile[] = []; 
-      
+      let currentScore = 0; // Локальная переменная для счета
+      setScore(s => { currentScore = s; return s; }); // Получаем текущий счет
+
       const processLine = (group: Tile[]) => {
          const stack: Tile[] = [];
          for (let tile of group) {
@@ -129,9 +132,8 @@ export const Game2048: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) => 
                   const cleaned = prev.filter(t => !t.toDelete);
                   const withNew = [...cleaned, createRandomTile(cleaned)];
                   // Check game over
+                  let canMove = false;
                   if (withNew.length === 16) {
-                      // simple check
-                      let canMove = false;
                       for(let r=0; r<4; r++) {
                           for(let c=0; c<4; c++) {
                              const curr = withNew.find(t=>t.r===r && t.c===c);
@@ -141,7 +143,11 @@ export const Game2048: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) => 
                              if (curr && down && curr.val === down.val) canMove = true;
                           }
                       }
-                      if (!canMove) setGameOver(true);
+                  }
+                  if (withNew.length === 16 && !canMove) {
+                      setGameOver(true);
+                      // СОХРАНЕНИЕ СЧЕТА: на Game Over
+                      onSaveScore(gameId, currentScore + scoreAdd);
                   }
                   return withNew;
               });
@@ -151,7 +157,7 @@ export const Game2048: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) => 
       }
       return prevTiles;
     });
-  }, [gameOver, hasWon, keepPlaying, isAnimating]);
+  }, [gameOver, hasWon, keepPlaying, isAnimating, onSaveScore, gameId]); // score убран из зависимостей, т.к. используется currentScore
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -248,7 +254,8 @@ export const Game2048: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) => 
 /* ==========================================
    GAME: Snake (Scaled Up)
    ========================================== */
-export const SnakeGame: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) => {
+// ДОБАВЛЕНО: gameId и onSaveScore
+export const SnakeGame: React.FC<{theme?: ThemeType, gameId: string, onSaveScore: (gameId: string, score: number) => void}> = ({theme = 'default', gameId, onSaveScore}) => {
     const GRID_SIZE = 20;
     const [snake, setSnake] = useState<{x:number,y:number}[]>([
         {x:10,y:10}, {x:9,y:10}, {x:8,y:10}, {x:7,y:10}
@@ -264,7 +271,7 @@ export const SnakeGame: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) =>
     const isSakura = theme === 'sakura';
 
     const spawnFood = useCallback(() => {
-        let newFood = { x: 0, y: 0 }; // Исправлено: инициализация переменной
+        let newFood = { x: 0, y: 0 }; 
         while(true) {
             newFood = {
                 x: Math.floor(Math.random() * GRID_SIZE),
@@ -296,10 +303,14 @@ export const SnakeGame: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) =>
 
             if (head.x < 0 || head.x >= GRID_SIZE || head.y < 0 || head.y >= GRID_SIZE) {
                 setGameOver(true);
+                // СОХРАНЕНИЕ СЧЕТА: на Game Over
+                onSaveScore(gameId, score);
                 return prev;
             }
             if (prev.some(s => s.x === head.x && s.y === head.y)) {
                 setGameOver(true);
+                // СОХРАНЕНИЕ СЧЕТА: на Game Over
+                onSaveScore(gameId, score);
                 return prev;
             }
 
@@ -312,7 +323,7 @@ export const SnakeGame: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) =>
             }
             return newSnake;
         });
-    }, [food, gameOver, isPaused, spawnFood]);
+    }, [food, gameOver, isPaused, spawnFood, score, onSaveScore, gameId]);
 
     useEffect(() => {
         if (!isPaused && !gameOver) {
@@ -442,7 +453,8 @@ export const SnakeGame: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) =>
 /* ==========================================
    GAME: Dino Run (Authentic Blocky Style)
    ========================================== */
-export const DinoGame: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) => {
+// ДОБАВЛЕНО: gameId и onSaveScore
+export const DinoGame: React.FC<{theme?: ThemeType, gameId: string, onSaveScore: (gameId: string, score: number) => void}> = ({theme = 'default', gameId, onSaveScore}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameState = useRef({
       isPlaying: false,
@@ -634,6 +646,9 @@ export const DinoGame: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) => 
               dinoBox.y + dinoBox.h > obs.y
           ) {
               state.isPlaying = false;
+              // СОХРАНЕНИЕ СЧЕТА: на Game Over
+              onSaveScore(gameId, Math.floor(state.score));
+
               ctx.fillStyle = 'rgba(0,0,0,0.7)';
               ctx.fillRect(0,0,width,height);
               ctx.fillStyle = '#fff';
@@ -661,9 +676,6 @@ export const DinoGame: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) => 
       }
   };
 
-// Внутри DinoGame...
-
-// ... (код drawDino, drawCactus, start, loop остается прежним) ...
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -692,6 +704,7 @@ export const DinoGame: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) => 
         if (!gameState.current.isPlaying) {
             start();
         } else {
+            // Реагируем на любой тап как на прыжок
             jump();
         }
     };
@@ -707,7 +720,6 @@ export const DinoGame: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) => 
         if(canvasRef.current) {
             const ctx = canvasRef.current.getContext('2d');
             if(ctx) {
-                // ... (тут твой код отрисовки старта) ...
                 ctx.fillStyle = isSakura ? '#fce7f3' : '#1a1c29';
                 ctx.fillRect(0,0,canvasRef.current.width, canvasRef.current.height);
                 ctx.fillStyle = isSakura ? '#be185d' : '#fff';
@@ -727,60 +739,16 @@ export const DinoGame: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) => 
         if (canvas) canvas.removeEventListener('touchstart', handleTouchStart);
         cancelAnimationFrame(reqRef.current);
     };
-  }, [theme]);
+  }, [theme, onSaveScore, gameId]); // Добавлены зависимости
 
   return (
-    // ИЗМЕНЕНИЕ: Добавлены классы w-full h-auto для адаптивности
+    // ИЗМЕНЕНИЕ: w-full h-auto для адаптивности + touch-none для предотвращения конфликтов
     <canvas 
         ref={canvasRef} 
         width={600} 
         height={250} 
         className={`rounded-xl border shadow-2xl cursor-pointer w-full h-auto object-contain max-w-[900px] touch-none ${isSakura ? 'border-pink-300 bg-pink-50' : 'border-white/10 bg-[#1a1c29]'}`}
-        onClick={start} // Оставляем клик для мышки
-    />
-  );
-
-        if (code === 'Space' || code === 'ArrowUp' || code === 'KeyW') jump();
-        if (code === 'ArrowDown' || code === 'KeyS') gameState.current.dino.ducking = true;
-    };
-    const handleKeyUp = (e: KeyboardEvent) => {
-        const code = e.code;
-        if (code === 'ArrowDown' || code === 'KeyS') gameState.current.dino.ducking = false;
-    };
-
-    window.addEventListener('keydown', handleKey);
-    window.addEventListener('keyup', handleKeyUp);
-    
-    setTimeout(() => {
-        if(canvasRef.current) {
-            const ctx = canvasRef.current.getContext('2d');
-            if(ctx) {
-                ctx.fillStyle = isSakura ? '#fce7f3' : '#1a1c29';
-                ctx.fillRect(0,0,canvasRef.current.width, canvasRef.current.height);
-                ctx.fillStyle = isSakura ? '#be185d' : '#fff';
-                ctx.font = '20px monospace';
-                ctx.fillText("Press SPACE to Jump", 200, 130);
-                drawDino(ctx, 50, 250 - 20 - 44, 40, 44, false, 0);
-                ctx.fillStyle = isSakura ? '#db2777' : '#535353';
-                ctx.fillRect(0, 250 - 20, 600, 2);
-            }
-        }
-    }, 100);
-
-    return () => {
-        window.removeEventListener('keydown', handleKey);
-        window.removeEventListener('keyup', handleKeyUp);
-        cancelAnimationFrame(reqRef.current);
-    };
-  }, [theme]);
-
-  return (
-    <canvas 
-        ref={canvasRef} 
-        width={600} 
-        height={250} 
-        className={`rounded-xl border shadow-2xl cursor-pointer w-full h-full object-contain max-w-[900px] ${isSakura ? 'border-pink-300 bg-pink-50' : 'border-white/10 bg-[#1a1c29]'}`}
-        onClick={start}
+        onClick={() => { if (!gameState.current.isPlaying) start(); }} // Оставляем клик для мышки/старта
     />
   );
 };
@@ -788,7 +756,8 @@ export const DinoGame: React.FC<{theme?: ThemeType}> = ({theme = 'default'}) => 
 /* ==========================================
    GAME: Clicker
    ========================================== */
-export const ClickerGame: React.FC<{onEarnCoins: (amount: number) => void}> = ({onEarnCoins}) => {
+// ДОБАВЛЕНО: gameId и onSaveScore
+export const ClickerGame: React.FC<{onEarnCoins: (amount: number) => void, gameId: string, onSaveScore: (gameId: string, score: number) => void}> = ({onEarnCoins, gameId, onSaveScore}) => {
   const [count, setCount] = useState(0);
   const [level, setLevel] = useState(1);
   const [timeLeft, setTimeLeft] = useState(60);
@@ -814,30 +783,60 @@ export const ClickerGame: React.FC<{onEarnCoins: (amount: number) => void}> = ({
       timerRef.current = setInterval(() => {
           setTimeLeft(prev => {
               if (prev <= 1) {
-                  endGame();
+                  endGame(prev);
                   return 0;
               }
               return prev - 1;
           });
       }, 1000);
   };
-
-  const endGame = () => {
+  
+  // Добавлена передача finalTimeLeft, чтобы избежать использования устаревшего стейта
+  const endGame = useCallback((finalTimeLeft: number) => { 
       if (timerRef.current) clearInterval(timerRef.current);
       setIsPlaying(false);
       setShowResult(true);
       
-      // Calculate Reward
-      let reward = 0;
-      let finalRank = 'Начинающий';
-      if (count > 100) { reward = 50; finalRank = 'Любитель'; }
-      if (count > 300) { reward = 150; finalRank = 'Быстрые пальчики'; }
-      if (count > 500) { reward = 300; finalRank = 'Бог клика'; }
-      
-      setRank(finalRank);
-      if (reward > 0) onEarnCoins(reward);
-  };
+      // СОХРАНЕНИЕ СЧЕТА: на Game End
+      // Сохраняем счет, который был к моменту окончания игры
+      setCount(finalCount => {
+          onSaveScore(gameId, finalCount);
+          
+          // Calculate Reward
+          let reward = 0;
+          let finalRank = 'Начинающий';
+          if (finalCount > 100) { reward = 50; finalRank = 'Любитель'; }
+          if (finalCount > 300) { reward = 150; finalRank = 'Быстрые пальчики'; }
+          if (finalCount > 500) { reward = 300; finalRank = 'Бог клика'; }
+          
+          setRank(finalRank);
+          if (reward > 0) onEarnCoins(reward);
+
+          return finalCount; // Возвращаем текущий счет
+      });
+
+  }, [onSaveScore, gameId, onEarnCoins]);
   
+  // Обновляем useEffect для таймера, чтобы использовать новую логику endGame
+  useEffect(() => {
+      if (!isPlaying) return;
+      
+      timerRef.current = setInterval(() => {
+          setTimeLeft(prev => {
+              if (prev <= 1) {
+                  endGame(prev);
+                  return 0;
+              }
+              return prev - 1;
+          });
+      }, 1000);
+
+      return () => {
+          if (timerRef.current) clearInterval(timerRef.current);
+      };
+  }, [isPlaying, endGame]);
+
+
   const handleClick = () => {
       if (!isPlaying) return;
       setCount(prev => prev + 1);
@@ -901,7 +900,8 @@ export const ClickerGame: React.FC<{onEarnCoins: (amount: number) => void}> = ({
 /* ==========================================
    GAME: Minesweeper
    ========================================== */
-export const MinesweeperGame: React.FC = () => {
+// ДОБАВЛЕНО: gameId и onSaveScore
+export const MinesweeperGame: React.FC<{gameId: string, onSaveScore: (gameId: string, score: number) => void}> = ({gameId, onSaveScore}) => {
   const ROWS = 10;
   const COLS = 10;
   const MINES = 15;
@@ -923,7 +923,6 @@ export const MinesweeperGame: React.FC = () => {
           }
           newGrid.push(row);
       }
-      // Note: Mines are now placed on first click to guarantee safety
       setGrid(newGrid);
       setGameOver(false);
       setWin(false);
@@ -971,6 +970,8 @@ export const MinesweeperGame: React.FC = () => {
           newGrid[r][c].isRevealed = true;
           setGrid(newGrid);
           setGameOver(true);
+          // СОХРАНЕНИЕ СЧЕТА: на Game Over (0 - проигрыш)
+          onSaveScore(gameId, 0); 
           return;
       }
 
@@ -989,7 +990,11 @@ export const MinesweeperGame: React.FC = () => {
 
       // Check Win
       const unrevealedSafe = newGrid.flat().filter(cell => !cell.isMine && !cell.isRevealed).length;
-      if(unrevealedSafe === 0) setWin(true);
+      if(unrevealedSafe === 0) {
+          setWin(true);
+          // СОХРАНЕНИЕ СЧЕТА: на Win (1 - победа)
+          onSaveScore(gameId, 1);
+      }
   };
 
   const toggleFlag = (e: React.MouseEvent, r: number, c: number) => {
@@ -1072,16 +1077,16 @@ export const CheckersGame: React.FC = () => {
         if(!piece) return [];
         
         // Directions: Red (-1), White (+1), King (both)
-        const dirs = piece.isKing ? [[-1,-1],[-1,1],[1,-1],[1,1]] : piece.player==='red' ? [[-1,-1],[-1,1]] : [[1,-1],[1,1]];
+        const dirs = piece.isKing ? [[-1,-1],[-1,1],[1,-1],[1,1]] : piece.player==='red' ? [[-1,-1],[-1,1]] : [[1,-1],[-1,-1],[1,1],[-1,1]];
         // Backward capture for regular pieces
-        const capDirs = piece.isKing ? dirs : [[-1,-1],[-1,1],[1,-1],[1,1]];
+        const capDirs = piece.isKing ? [[-1,-1],[-1,1],[1,-1],[1,1]] : piece.player==='red' ? [[-1,-1],[-1,1],[1,-1],[1,1]] : [[1,-1],[1,1],[-1,-1],[-1,1]];
 
         // Regular Moves (Only if not in multi-jump sequence)
         if (!mustCaptureWith) {
              dirs.forEach(([dr, dc]) => {
                 const nr = r + dr;
                 const nc = c + dc;
-                if(nr>=0 && nr<8 && nc>=0 && nc<8 && !b[nr][nc]) {
+                if(nr>=0 && nr<8 && nc>=0 && nc<8 && (r+nr)%2===1 && !b[nr][nc]) { // Добавлена проверка на черную клетку
                     moves.push({r:nr, c:nc, isCapture: false});
                 }
              });
@@ -1094,7 +1099,7 @@ export const CheckersGame: React.FC = () => {
             const mr = r + dr;
             const mc = c + dc;
             
-            if(jr>=0 && jr<8 && jc>=0 && jc<8 && !b[jr][jc]) {
+            if(jr>=0 && jr<8 && jc>=0 && jc<8 && (r+jr)%2===1 && !b[jr][jc]) { // Добавлена проверка на черную клетку
                 const mid = b[mr][mc];
                 if(mid && mid.player !== piece.player) {
                     moves.push({r:jr, c:jc, isCapture: true, mid: {r:mr, c:mc}});
@@ -1102,7 +1107,7 @@ export const CheckersGame: React.FC = () => {
             }
         });
 
-        return moves;
+        return moves.filter(m => (m.isCapture && piece.player==='red' && m.r < r) || (m.isCapture && piece.player==='white' && m.r > r) || piece.isKing || !m.isCapture);
     };
 
     const handleClick = (r: number, c: number) => {
@@ -1115,16 +1120,20 @@ export const CheckersGame: React.FC = () => {
 
             const moves = getValidMoves(board, r, c, clickedPiece);
             
-            // If multijump, filter only captures
-            if (mustCaptureWith) {
-                const captures = moves.filter(m => m.isCapture);
-                if (captures.length > 0) {
-                    setSelected({r,c});
-                    setValidMoves(captures);
-                }
-            } else {
+            // Если есть обязательный ход захвата, показываем только его
+            const allCaptures = moves.filter(m => m.isCapture);
+            if (allCaptures.length > 0) {
+                 setSelected({r,c});
+                 setValidMoves(allCaptures);
+            } else if (!mustCaptureWith) {
+                // Если нет обязательных захватов, показываем все доступные ходы
                 setSelected({r,c});
                 setValidMoves(moves);
+            } else {
+                // Если должны были захватить, но захватов нет (ошибка или конец цепи)
+                setSelected(null);
+                setValidMoves([]);
+                setMustCaptureWith(null);
             }
             return;
         }
@@ -1171,6 +1180,8 @@ export const CheckersGame: React.FC = () => {
             setSelected(null);
             setValidMoves([]);
             setMustCaptureWith(null);
+
+            // TODO: Check Win condition (no pieces left for opponent)
         }
     };
 
@@ -1253,6 +1264,40 @@ export const PaintGame: React.FC = () => {
         window.addEventListener('mouseup', stop);
     };
 
+    // ДОБАВЛЕНО: Обработчик касаний для мобильных
+    const startDrawTouch = (e: React.TouchEvent) => {
+        const canvas = canvasRef.current;
+        if(!canvas || e.touches.length === 0) return;
+        const ctx = canvas.getContext('2d');
+        if(!ctx) return;
+        
+        e.preventDefault();
+        
+        ctx.beginPath();
+        const rect = canvas.getBoundingClientRect();
+        const touch = e.touches[0];
+        ctx.moveTo(touch.clientX - rect.left, touch.clientY - rect.top);
+
+        const draw = (ev: TouchEvent) => {
+            if(ev.touches.length === 0) return;
+            const t = ev.touches[0];
+            ctx.lineTo(t.clientX - rect.left, t.clientY - rect.top);
+            ctx.strokeStyle = tool === 'eraser' ? '#151621' : color;
+            ctx.lineWidth = size;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+        };
+
+        const stop = () => {
+            window.removeEventListener('touchmove', draw);
+            window.removeEventListener('touchend', stop);
+        };
+
+        window.addEventListener('touchmove', draw, { passive: false });
+        window.addEventListener('touchend', stop);
+    };
+
+
     const clear = () => {
         const canvas = canvasRef.current;
         if(!canvas) return;
@@ -1283,18 +1328,18 @@ export const PaintGame: React.FC = () => {
                 width={800} 
                 height={450} 
                 onMouseDown={startDraw}
-                // Добавляем обработчики касания (простейшие, для рисования пальцем нужно чуть больше логики, но пока адаптация размеров)
+                onTouchStart={startDrawTouch} // ДОБАВЛЕНО: Обработчик касаний
                 className="bg-[#151621] border border-white/10 shadow-xl rounded-xl cursor-crosshair w-full h-auto max-w-[800px] touch-none"
             />
         </div>
-    );
     );
 };
 
 /* ==========================================
    GAME: Tetris (Full Logic Restored)
    ========================================== */
-export const TetrisGame: React.FC = () => {
+// ДОБАВЛЕНО: gameId и onSaveScore
+export const TetrisGame: React.FC<{gameId: string, onSaveScore: (gameId: string, score: number) => void}> = ({gameId, onSaveScore}) => {
     const COLS = 10;
     const ROWS = 20;
     const BLOCK_SIZE = 30;
@@ -1339,6 +1384,8 @@ export const TetrisGame: React.FC = () => {
         if (checkCollision(0, 0, shape)) {
             gameState.current.gameOver = true;
             gameState.current.isRunning = false;
+            // СОХРАНЕНИЕ СЧЕТА: на Game Over
+            onSaveScore(gameId, scoreRef.current);
         }
     };
 
