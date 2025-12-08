@@ -1268,21 +1268,26 @@ export const PaintGame: React.FC = () => {
 
     return (
         <div className="flex flex-col items-center gap-4 w-full h-full p-4">
-            <div className="flex gap-4 p-2 bg-panel rounded-xl border border-white/10">
+            {/* Панель инструментов: добавим flex-wrap, чтобы кнопки переносились на новую строку если экран узкий */}
+            <div className="flex flex-wrap justify-center gap-4 p-2 bg-panel rounded-xl border border-white/10">
                 <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-8 h-8 rounded cursor-pointer"/>
                 <input type="range" min="1" max="20" value={size} onChange={e => setSize(Number(e.target.value))} className="w-24"/>
                 <button onClick={() => setTool('brush')} className={`p-1.5 rounded ${tool==='brush' ? 'bg-white/20' : ''}`}><MousePointer2 size={18}/></button>
                 <button onClick={() => setTool('eraser')} className={`p-1.5 rounded ${tool==='eraser' ? 'bg-white/20' : ''}`}><Eraser size={18}/></button>
                 <button onClick={clear} className="p-1.5 hover:bg-red-500/20 rounded hover:text-red-400"><Trash2 size={18}/></button>
             </div>
+            
+            {/* ИЗМЕНЕНИЕ: w-full h-auto для канваса */}
             <canvas 
                 ref={canvasRef} 
                 width={800} 
                 height={450} 
                 onMouseDown={startDraw}
-                className="bg-[#151621] border border-white/10 shadow-xl rounded-xl cursor-crosshair w-full max-w-[800px] touch-none"
+                // Добавляем обработчики касания (простейшие, для рисования пальцем нужно чуть больше логики, но пока адаптация размеров)
+                className="bg-[#151621] border border-white/10 shadow-xl rounded-xl cursor-crosshair w-full h-auto max-w-[800px] touch-none"
             />
         </div>
+    );
     );
 };
 
