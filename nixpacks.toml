@@ -1,10 +1,11 @@
 # nixpacks.toml
 
-# 1. Говорим Railway установить и Python, и Node.js
 providers = ['python', 'node']
 
-# 2. Настраиваем фазу сборки (Build)
-# Nixpacks выполнит эти команды по очереди
+# 👇 Добавь этот блок, чтобы зафиксировать версию Python
+[variables]
+PYTHON_VERSION = '3.11'
+
 [phases.build]
 cmds = [
     'pip install -r requirements.txt',
@@ -12,6 +13,5 @@ cmds = [
     'npm run build'
 ]
 
-# 3. Настраиваем фазу запуска (Start)
 [start]
 cmd = 'python server.py'
