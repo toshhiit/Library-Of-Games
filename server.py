@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import threading
 import telebot
-from telebot import types # Импортируем типы для клавиатур
+from telebot import types 
 import uuid
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -88,6 +88,7 @@ def handle_games_request(message):
             
             # Генерация токена
             token = str(uuid.uuid4())
+            # Дата окончания срока действия токена
             expires_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
             
             cursor.execute("""
@@ -172,7 +173,6 @@ def stats_cmd(message):
 def send_stats_page(chat_id, tg_id, page, message_id=None, is_edit=False):
     try:
         conn = get_db_connection()
-        # Для удобства используем RealDictCursor
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             # 1. Получаем ID пользователя
             cursor.execute("SELECT id FROM users WHERE tg_id=%s", (tg_id,))
@@ -183,7 +183,6 @@ def send_stats_page(chat_id, tg_id, page, message_id=None, is_edit=False):
             user_id = user_row['id']
             
             # 2. Получаем список всех уникальных игр, в которые играл пользователь, и их лучший счет
-            # Используем оконную функцию для нахождения лучшего счета по каждой игре
             cursor.execute("""
                 WITH RankedScores AS (
                     SELECT 
@@ -213,9 +212,21 @@ def send_stats_page(chat_id, tg_id, page, message_id=None, is_edit=False):
             current_game_name = GAME_NAMES.get(current_game_id, f"Игра #{current_game_id}")
             
             # 4. Формируем текст сообщения
-            # Обрабатываем, если created_at не является datetime объектом (редко, но бывает)
             created_at = current_score_data.get('created_at')
-            date_str = created_at.strftime("%d.%m.%Y %H:%M") if isinstance(created_at, datetime) else str(created_at)
+            
+            # Упрощенная обработка даты, если БД возвращает строку (TEXT)
+            date_str = "Н/Д"
+            if isinstance(created_at, datetime):
+                # Если это datetime объект 
+                date_str = created_at.strftime("%d.%m.%Y %H:%M")
+            elif isinstance(created_at, str):
+                # Если это строка (TEXT) - пробуем распарсить ISO 8601
+                try:
+                    dt_obj = datetime.fromisoformat(created_at)
+                    date_str = dt_obj.strftime("%d.%m.%Y %H:%M")
+                except ValueError:
+                    date_str = created_at # Выводим сырую строку, если парсинг не удался
+
             
             text = (
                 f"🏆 *Твоя Лучшая Статистика* (Игра {page + 1} из {num_games}):\n\n"
@@ -226,7 +237,6 @@ def send_stats_page(chat_id, tg_id, page, message_id=None, is_edit=False):
                 
             # 5. Создаем навигационные кнопки (Inline Keyboard)
             markup = types.InlineKeyboardMarkup(row_width=3)
-            # В callback_data добавляем tg_id, чтобы только владелец мог листать статистику
             prev_page = (page - 1 + num_games) % num_games
             next_page = (page + 1) % num_games
             
@@ -414,11 +424,14 @@ def save_score_api():
             
             user_id = row[0]
             
-            # 2. Сохраняем счет (Должна существовать таблица game_scores!)
+            # 2. Сохраняем счет
+            # Генерируем ISO-строку времени в Python, чтобы записать ее в поле TEXT
+            current_time = datetime.now(timezone.utc).isoformat()
+            
             cursor.execute("""
                 INSERT INTO game_scores (user_id, game_id, score, created_at)
-                VALUES (%s, %s, %s, NOW())
-            """, (user_id, game_id, score))
+                VALUES (%s, %s, %s, %s)
+            """, (user_id, game_id, score, current_time))
             conn.commit()
 
         conn.close()
