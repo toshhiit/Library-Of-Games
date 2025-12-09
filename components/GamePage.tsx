@@ -9,10 +9,11 @@ interface GamePageProps {
   theme?: ThemeType;
   onBack: () => void;
   onEarnCoins: (amount: number) => void;
+  onSpendCoins: (amount: number) => boolean; // Добавлено
   onSaveScore: (gameId: string, score: number) => void;
 }
 
-const GamePage: React.FC<GamePageProps> = ({ game, theme = 'default', onBack, onEarnCoins, onSaveScore }) => {
+const GamePage: React.FC<GamePageProps> = ({ game, theme = 'default', onBack, onEarnCoins, onSpendCoins, onSaveScore }) => {
   const [isPlaying, setIsPlaying] = useState(false);
 
   const renderGame = () => {
@@ -24,8 +25,8 @@ const GamePage: React.FC<GamePageProps> = ({ game, theme = 'default', onBack, on
       case 'Сапёр': return <MinesweeperGame gameId={game.id} onSaveScore={onSaveScore} />;
       case 'Шашки': return <CheckersGame />;
       case 'Paint': return <PaintGame />;
-      case 'Tetris': return <TetrisGame gameId={game.id} onSaveScore={onSaveScore} />;
-      case 'Пасьянс': return <SolitaireGame />;
+      case 'Tetris': return <TetrisGame gameId={game.id} onSaveScore={onSaveScore} theme={theme} />;
+      case 'Пасьянс': return <SolitaireGame onSpendCoins={onSpendCoins} />; // Передаем функцию списания
       default: return (
         <div className="flex flex-col items-center justify-center h-full text-textMuted">
           <p>Игра в разработке...</p>
@@ -80,7 +81,7 @@ const GamePage: React.FC<GamePageProps> = ({ game, theme = 'default', onBack, on
         )}
       </div>
 
-      {/* Game Container (ИЗМЕНЕНО: aspect-video убрано при игре для увеличения высоты) */}
+      {/* Game Container */}
       <div className={`relative w-full ${isPlaying ? 'min-h-[500px] h-auto' : 'aspect-video'} rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border group mb-8 select-none ${isSakura ? 'bg-pink-900/20 border-pink-500/30' : 'bg-[#151621] border-white/10'}`}>
         
         {/* Decorative Glow */}
