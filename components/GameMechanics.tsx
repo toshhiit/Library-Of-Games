@@ -1887,10 +1887,7 @@ export const SolitaireGame: React.FC<{onSpendCoins?: (amount: number) => boolean
 
         // Is this card highlighted by a hint?
         // We only highlight if hintSource matches exactly OR if it's a stack hint and this is the top card/specific card
-        const isHinted = hintSource && hintSource.id === c.id; 
-        // Logic for hintSource:
-        // if type tableau, hintSource.idx === colIdx, hintSource.cardIdx === currentIdx
-        // if type waste, hintSource.type === 'waste' and current is top waste card
+        // const isHinted = hintSource && hintSource.id === c.id; 
 
         return (
             <motion.div 
