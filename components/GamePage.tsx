@@ -9,7 +9,6 @@ interface GamePageProps {
   theme?: ThemeType;
   onBack: () => void;
   onEarnCoins: (amount: number) => void;
-  // ДОБАВЛЕНО: Новый проп для сохранения счета
   onSaveScore: (gameId: string, score: number) => void;
 }
 
@@ -17,17 +16,16 @@ const GamePage: React.FC<GamePageProps> = ({ game, theme = 'default', onBack, on
   const [isPlaying, setIsPlaying] = useState(false);
 
   const renderGame = () => {
-    // Обновлено: Пробрасываем game.id и onSaveScore в игры со счетом
     switch (game.name) {
       case '2048': return <Game2048 theme={theme} gameId={game.id} onSaveScore={onSaveScore} />;
       case 'Snake': return <SnakeGame theme={theme} gameId={game.id} onSaveScore={onSaveScore} />;
       case 'Dino Run': return <DinoGame theme={theme} gameId={game.id} onSaveScore={onSaveScore} />;
       case 'Clicker': return <ClickerGame onEarnCoins={onEarnCoins} gameId={game.id} onSaveScore={onSaveScore} />;
       case 'Сапёр': return <MinesweeperGame gameId={game.id} onSaveScore={onSaveScore} />;
-      case 'Шашки': return <CheckersGame />; // Без счета
-      case 'Paint': return <PaintGame />;     // Без счета
+      case 'Шашки': return <CheckersGame />;
+      case 'Paint': return <PaintGame />;
       case 'Tetris': return <TetrisGame gameId={game.id} onSaveScore={onSaveScore} />;
-      case 'Пасьянс': return <SolitaireGame />; // Без счета
+      case 'Пасьянс': return <SolitaireGame />;
       default: return (
         <div className="flex flex-col items-center justify-center h-full text-textMuted">
           <p>Игра в разработке...</p>
@@ -82,8 +80,8 @@ const GamePage: React.FC<GamePageProps> = ({ game, theme = 'default', onBack, on
         )}
       </div>
 
-      {/* Game Container */}
-      <div className={`relative w-full aspect-video rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border group mb-8 select-none ${isSakura ? 'bg-pink-900/20 border-pink-500/30' : 'bg-[#151621] border-white/10'}`}>
+      {/* Game Container (ИЗМЕНЕНО: aspect-video убрано при игре для увеличения высоты) */}
+      <div className={`relative w-full ${isPlaying ? 'min-h-[500px] h-auto' : 'aspect-video'} rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border group mb-8 select-none ${isSakura ? 'bg-pink-900/20 border-pink-500/30' : 'bg-[#151621] border-white/10'}`}>
         
         {/* Decorative Glow */}
         <div className={`absolute -inset-1 bg-gradient-to-r rounded-2xl opacity-20 blur-lg pointer-events-none ${isSakura ? 'from-pink-500 to-rose-600' : 'from-blue-500 to-purple-600'}`}></div>
@@ -91,7 +89,7 @@ const GamePage: React.FC<GamePageProps> = ({ game, theme = 'default', onBack, on
         {/* Active Game or Placeholder */}
         <div className="relative z-10 w-full h-full">
           {isPlaying ? (
-            <div className={`w-full h-full flex items-center justify-center ${isSakura ? 'bg-black/40' : 'bg-[#0C0D14]'}`}>
+            <div className={`w-full h-full flex flex-col items-center justify-center p-4 ${isSakura ? 'bg-black/40' : 'bg-[#0C0D14]'}`}>
               {renderGame()}
             </div>
           ) : (
@@ -126,7 +124,7 @@ const GamePage: React.FC<GamePageProps> = ({ game, theme = 'default', onBack, on
                     <h2 className="text-xl font-bold">Об игре</h2>
                 </div>
                 <p className={`${isSakura ? 'text-pink-200' : 'text-textMuted'} leading-relaxed text-lg`}>
-                    {game.description} Используйте ваши навыки и реакцию, чтобы победить. Игра адаптирована для работы в браузере.
+                    {game.description} Используйте ваши навыки и реакцию, чтобы победить. Игра адаптирована для работы в браузере и на мобильных устройствах.
                 </p>
             </div>
 
@@ -145,7 +143,7 @@ const GamePage: React.FC<GamePageProps> = ({ game, theme = 'default', onBack, on
                         <div className="w-8 h-8 rounded border border-white/20 flex items-center justify-center text-xs bg-white/5"><ArrowRight size={16}/></div>
                       </div>
                     </div>
-                    <span className="text-sm text-textMuted">Перемещение</span>
+                    <span className="text-sm text-textMuted">Перемещение (ПК / Сенсор)</span>
                   </div>
                   <div className="bg-white/5 p-4 rounded-xl flex items-center gap-3">
                     <div className="h-8 px-3 rounded border border-white/20 flex items-center justify-center text-xs bg-white/5">Space</div>
