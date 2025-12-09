@@ -35,9 +35,10 @@ if not DATABASE_URL:
 
 # ==================== BOT KEYBOARDS & CONSTS ====================
 # Пользовательская клавиатура (менюшка снизу)
+# Сначала создаем клавиатуру с параметрами, потом добавляем кнопки
 REPLY_KEYBOARD = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
 REPLY_KEYBOARD.add(types.KeyboardButton("🎮 Играть"))
-# Добавили кнопку Профиль в ряд с статистикой
+# Добавили кнопку "👤 Профиль"
 REPLY_KEYBOARD.row(types.KeyboardButton("👤 Профиль"), types.KeyboardButton("🏆 Моя Статистика"))
 REPLY_KEYBOARD.add(types.KeyboardButton("❓ Помощь"))
 
@@ -107,11 +108,11 @@ def handle_games_request(message):
         bot.send_message(chat_id, "Ошибка сервера или базы данных.", reply_markup=REPLY_KEYBOARD)
 
 
-# Обработчик /start (обновлен для меню)
+# Обработчик /start (обновлен для меню и создания статистики)
 @bot.message_handler(commands=['start'])
 def start_cmd(message):
     tg_id = message.from_user.id
-    username = message.from_user.username
+    username = message.from_user.username or "Player"
     
     try:
         conn = get_db_connection()
@@ -121,12 +122,15 @@ def start_cmd(message):
             user = cursor.fetchone()
 
             if not user:
+                # 1. Создаем юзера
                 cursor.execute(
                     "INSERT INTO users (tg_id, username) VALUES (%s, %s) RETURNING id",
                     (tg_id, username)
                 )
                 new_user_id = cursor.fetchone()[0]
-                # Создаем начальную статистику
+                
+                # 2. Создаем запись в твоей таблице STATS
+                # Задаем начальные значения: xp=0, coins=1000, level=1
                 cursor.execute(
                     "INSERT INTO stats (user_id, xp, coins, level) VALUES (%s, 0, 1000, 1)",
                     (new_user_id,)
@@ -134,6 +138,16 @@ def start_cmd(message):
                 conn.commit()
                 bot.send_message(message.chat.id, "Добро пожаловать! Аккаунт создан.", reply_markup=REPLY_KEYBOARD)
             else:
+                # Если юзер есть, но статистики нет (для старых аккаунтов)
+                user_id = user[0]
+                cursor.execute("SELECT id FROM stats WHERE user_id=%s", (user_id,))
+                if not cursor.fetchone():
+                     cursor.execute(
+                        "INSERT INTO stats (user_id, xp, coins, level) VALUES (%s, 0, 1000, 1)",
+                        (user_id,)
+                    )
+                     conn.commit()
+                
                 bot.send_message(message.chat.id, "С возвращением! Выбери действие:", reply_markup=REPLY_KEYBOARD)
         conn.close()
     except Exception as e:
@@ -155,7 +169,7 @@ def profile_cmd(message):
     try:
         conn = get_db_connection()
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            # Получаем данные пользователя и его статистику
+            # Получаем данные пользователя и его статистику, объединяя таблицы users и stats
             cursor.execute("""
                 SELECT u.username, s.coins, s.xp, s.level 
                 FROM users u
@@ -166,14 +180,15 @@ def profile_cmd(message):
             user_data = cursor.fetchone()
             
             if user_data:
-                # Если stats еще не создана (для старых юзеров), ставим дефолтные значения
+                # Если stats еще пустая, ставим 0/1 по умолчанию
                 coins = user_data['coins'] if user_data['coins'] is not None else 0
                 xp = user_data['xp'] if user_data['xp'] is not None else 0
                 level = user_data['level'] if user_data['level'] is not None else 1
+                name = user_data['username'] or "Игрок"
                 
                 text = (
                     f"👤 *Твой Профиль*\n\n"
-                    f"🆔 *Имя*: {user_data['username']}\n"
+                    f"🆔 *Имя*: {name}\n"
                     f"📊 *Уровень*: {level}\n"
                     f"⭐ *Опыт (XP)*: {xp}\n"
                     f"💰 *Монеты*: {coins}\n\n"
@@ -181,7 +196,7 @@ def profile_cmd(message):
                 )
                 bot.send_message(message.chat.id, text, parse_mode='Markdown', reply_markup=REPLY_KEYBOARD)
             else:
-                bot.send_message(message.chat.id, "Профиль не найден. Нажми /start", reply_markup=REPLY_KEYBOARD)
+                bot.send_message(message.chat.id, "Профиль не найден. Нажми /start для регистрации.", reply_markup=REPLY_KEYBOARD)
                 
         conn.close()
     except Exception as e:
