@@ -35,14 +35,10 @@ if not DATABASE_URL:
 
 # ==================== BOT KEYBOARDS & CONSTS ====================
 # Пользовательская клавиатура (менюшка снизу)
-REPLY_KEYBOARD = types.ReplyKeyboardMarkup(
-    [
-        [types.KeyboardButton("🎮 Играть")],
-        [types.KeyboardButton("🏆 Моя Статистика"), types.KeyboardButton("❓ Помощь")]
-    ],
-    resize_keyboard=True,
-    one_time_keyboard=False
-)
+# ИСПРАВЛЕНИЕ: Сначала создаем объект, потом добавляем кнопки
+REPLY_KEYBOARD = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
+REPLY_KEYBOARD.add(types.KeyboardButton("🎮 Играть"))
+REPLY_KEYBOARD.row(types.KeyboardButton("🏆 Моя Статистика"), types.KeyboardButton("❓ Помощь"))
 
 # ID игр (из constants.ts)
 GAME_NAMES = {
