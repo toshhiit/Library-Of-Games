@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { RefreshCw, MousePointer2, Timer, Crown, Flag, Bomb, Eraser, Trash2, Repeat, ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from 'lucide-react';
+import { RefreshCw, MousePointer2, Timer, Crown, Flag, Bomb, Eraser, Trash2, Repeat, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Lightbulb } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeType } from '../types';
 
@@ -1602,19 +1602,38 @@ export const TetrisGame: React.FC<{gameId: string, onSaveScore: (gameId: string,
 };
 
 /* ==========================================
-   GAME: Solitaire (New Design & Animation)
+   GAME: Solitaire (New Design & Animation & Hint)
    ========================================== */
 type Card = { suit: 'h'|'d'|'c'|'s', val: number, faceUp: boolean, color: 'red'|'black', id: string };
 type Stack = Card[];
 
-export const SolitaireGame: React.FC = () => {
+// Add onSpendCoins to props
+export const SolitaireGame: React.FC<{onSpendCoins?: (amount: number) => boolean}> = ({onSpendCoins}) => {
     const [deck, setDeck] = useState<Stack>([]);
     const [waste, setWaste] = useState<Stack>([]);
     const [foundations, setFoundations] = useState<Stack[]>([[],[],[],[]]); 
     const [tableau, setTableau] = useState<Stack[]>([[],[],[],[],[],[],[]]); 
     const [selected, setSelected] = useState<{type: 'tableau'|'waste', idx: number, cardIdx?: number} | null>(null);
+    const [hintSource, setHintSource] = useState<{type: 'tableau'|'waste', idx: number, cardIdx?: number} | null>(null);
+    const [message, setMessage] = useState<string | null>(null);
 
     useEffect(() => { deal(); }, []);
+
+    // Clear hint after 2 seconds
+    useEffect(() => {
+        if (hintSource) {
+            const t = setTimeout(() => setHintSource(null), 2000);
+            return () => clearTimeout(t);
+        }
+    }, [hintSource]);
+
+    // Clear message after 2 seconds
+    useEffect(() => {
+        if (message) {
+            const t = setTimeout(() => setMessage(null), 2000);
+            return () => clearTimeout(t);
+        }
+    }, [message]);
 
     const createDeck = () => {
         const suits: ('h'|'d'|'c'|'s')[] = ['h','d','c','s'];
@@ -1650,6 +1669,115 @@ export const SolitaireGame: React.FC = () => {
         setFoundations([[],[],[],[]]);
         setTableau(t);
         setSelected(null);
+        setHintSource(null);
+    };
+
+    // --- HINT LOGIC ---
+    const getHint = () => {
+        if (!onSpendCoins) {
+            setMessage("Ошибка: нет доступа к монетам");
+            return;
+        }
+        
+        // Attempt to spend 100 coins
+        if (!onSpendCoins(100)) {
+            setMessage("Недостаточно монет (100)");
+            return;
+        }
+
+        // 1. Check Tableau to Foundation
+        for (let i = 0; i < 7; i++) {
+            const stack = tableau[i];
+            if (stack.length > 0) {
+                const card = stack[stack.length - 1];
+                for (let f = 0; f < 4; f++) {
+                    const fStack = foundations[f];
+                    const target = fStack.length > 0 ? fStack[fStack.length - 1] : null;
+                    // Check logic
+                    if ((!target && card.val === 1) || (target && target.suit === card.suit && target.val === card.val - 1)) {
+                        setHintSource({ type: 'tableau', idx: i, cardIdx: stack.length - 1 });
+                        setMessage("Ход в дом!");
+                        return;
+                    }
+                }
+            }
+        }
+
+        // 2. Check Tableau to Tableau
+        for (let i = 0; i < 7; i++) { // Source Column
+            const stack = tableau[i];
+            if (stack.length === 0) continue;
+            
+            // Find first face-up card
+            let firstFaceUpIdx = -1;
+            for(let k=0; k<stack.length; k++) {
+                if (stack[k].faceUp) { firstFaceUpIdx = k; break; }
+            }
+            if (firstFaceUpIdx === -1) continue;
+
+            const cardToMove = stack[firstFaceUpIdx];
+
+            // Don't move a King from an empty spot to another empty spot
+            if (cardToMove.val === 13 && firstFaceUpIdx === 0) continue; 
+
+            for (let j = 0; j < 7; j++) { // Target Column
+                if (i === j) continue;
+                const targetStack = tableau[j];
+                const targetCard = targetStack.length > 0 ? targetStack[targetStack.length - 1] : null;
+
+                if ((!targetCard && cardToMove.val === 13) || 
+                    (targetCard && targetCard.color !== cardToMove.color && targetCard.val === cardToMove.val + 1)) {
+                    setHintSource({ type: 'tableau', idx: i, cardIdx: firstFaceUpIdx });
+                    setMessage("Переложи карты");
+                    return;
+                }
+            }
+        }
+
+        // 3. Check Waste to Foundation
+        if (waste.length > 0) {
+            const card = waste[waste.length - 1];
+            for (let f = 0; f < 4; f++) {
+                const fStack = foundations[f];
+                const target = fStack.length > 0 ? fStack[fStack.length - 1] : null;
+                if ((!target && card.val === 1) || (target && target.suit === card.suit && target.val === card.val - 1)) {
+                    setHintSource({ type: 'waste', idx: 0 }); // idx 0 for waste simple ref
+                    setMessage("Из колоды в дом");
+                    return;
+                }
+            }
+        }
+
+        // 4. Check Waste to Tableau
+        if (waste.length > 0) {
+            const card = waste[waste.length - 1];
+            for (let i = 0; i < 7; i++) {
+                const targetStack = tableau[i];
+                const targetCard = targetStack.length > 0 ? targetStack[targetStack.length - 1] : null;
+                if ((!targetCard && card.val === 13) || 
+                    (targetCard && targetCard.color !== card.color && targetCard.val === card.val + 1)) {
+                    setHintSource({ type: 'waste', idx: 0 });
+                    setMessage("Из колоды на поле");
+                    return;
+                }
+            }
+        }
+
+        // 5. Check Deck flip
+        if (deck.length > 0) {
+             // Just highlight deck
+             // We can use a special "deck" type or just say "Flip card"
+             setMessage("Возьми карту");
+             return;
+        }
+        
+        // If nothing found (rare if deck !empty)
+        if (waste.length > 0 && deck.length === 0) {
+             setMessage("Переверни колоду");
+             return;
+        }
+
+        setMessage("Нет доступных ходов");
     };
 
     const drawCard = () => {
@@ -1757,6 +1885,13 @@ export const SolitaireGame: React.FC = () => {
         };
         const getValStr = (v: number) => ['A','2','3','4','5','6','7','8','9','10','J','Q','K'][v-1];
 
+        // Is this card highlighted by a hint?
+        // We only highlight if hintSource matches exactly OR if it's a stack hint and this is the top card/specific card
+        const isHinted = hintSource && hintSource.id === c.id; 
+        // Logic for hintSource:
+        // if type tableau, hintSource.idx === colIdx, hintSource.cardIdx === currentIdx
+        // if type waste, hintSource.type === 'waste' and current is top waste card
+
         return (
             <motion.div 
                 layoutId={c.id} 
@@ -1794,8 +1929,10 @@ export const SolitaireGame: React.FC = () => {
 
     return (
         <div className="w-full max-w-[600px] flex flex-col items-center">
+            {/* Top Row: Deck, Waste, Foundations */}
             <div className="flex justify-between w-full mb-6 px-2 gap-2">
                 <div className="flex gap-2">
+                    {/* Deck */}
                     <div onClick={drawCard} className="w-[50px] h-[75px] sm:w-[60px] sm:h-[90px] border-2 border-dashed border-white/20 rounded-lg flex items-center justify-center cursor-pointer hover:bg-white/5 relative">
                         {deck.length > 0 ? (
                             <>
@@ -1804,10 +1941,25 @@ export const SolitaireGame: React.FC = () => {
                             </>
                         ) : <RefreshCw className="text-white/50"/>}
                     </div>
+                    {/* Waste */}
                     <div className="w-[50px] h-[75px] sm:w-[60px] sm:h-[90px]">
-                        {waste.length > 0 && renderCard(waste[waste.length-1], () => handleCardClick('waste', 0), selected?.type === 'waste')}
+                        {waste.length > 0 && renderCard(
+                            waste[waste.length-1], 
+                            () => handleCardClick('waste', 0), 
+                            selected?.type === 'waste',
+                            false
+                        )}
+                        {/* HINT OVERLAY FOR WASTE */}
+                        {hintSource?.type === 'waste' && (
+                            <motion.div 
+                                animate={{ opacity: [0.5, 1, 0.5] }} 
+                                transition={{ repeat: Infinity, duration: 1 }}
+                                className="absolute inset-0 bg-yellow-400/30 rounded-lg pointer-events-none z-50 ring-2 ring-yellow-400"
+                            />
+                        )}
                     </div>
                 </div>
+                {/* Foundations */}
                 <div className="flex gap-2">
                     {foundations.map((f, i) => (
                         <div key={i} onClick={() => handleCardClick('foundation', i)} className="w-[50px] h-[75px] sm:w-[60px] sm:h-[90px] border border-white/20 rounded-lg bg-white/5 flex items-center justify-center relative">
@@ -1817,11 +1969,14 @@ export const SolitaireGame: React.FC = () => {
                 </div>
             </div>
 
+            {/* Tableau (Main Playing Area) */}
             <div className="flex justify-between w-full px-2 gap-1 min-h-[300px]">
                 {tableau.map((stack, i) => (
                     <div key={i} className="flex flex-col relative w-[50px] sm:w-[60px]">
+                        {/* Empty placeholder */}
                         <div onClick={() => handleCardClick('tableau', i)} className="w-full h-[75px] sm:h-[90px] rounded-lg border border-white/5 bg-white/5 absolute top-0 left-0" />
                         
+                        {/* Cards Stack */}
                         {stack.map((c, ci) => (
                             <div key={c.id} className="absolute w-full" style={{ top: `${ci * 30}px`, zIndex: ci + 1 }}>
                                 {renderCard(
@@ -1829,17 +1984,47 @@ export const SolitaireGame: React.FC = () => {
                                     () => handleCardClick('tableau', i, ci), 
                                     selected?.type==='tableau' && selected.idx===i && selected.cardIdx!==undefined && ci >= selected.cardIdx
                                 )}
+                                {/* HINT OVERLAY FOR TABLEAU */}
+                                {hintSource?.type === 'tableau' && hintSource.idx === i && hintSource.cardIdx === ci && (
+                                    <motion.div 
+                                        animate={{ opacity: [0.5, 1, 0.5] }} 
+                                        transition={{ repeat: Infinity, duration: 1 }}
+                                        className="absolute inset-0 bg-yellow-400/30 rounded-lg pointer-events-none z-50 ring-2 ring-yellow-400"
+                                    />
+                                )}
                             </div>
                         ))}
                     </div>
                 ))}
             </div>
             
-            <div className="mt-8 flex gap-4">
+            {/* Controls Row */}
+            <div className="mt-8 flex gap-4 items-center justify-center">
                 <button onClick={deal} className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 transition-colors">
                     <Repeat size={16}/> New Deal
                 </button>
+                <button 
+                    onClick={getHint} 
+                    className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border border-yellow-500/50 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 transition-colors shadow-lg active:scale-95"
+                >
+                    <Lightbulb size={16} /> 
+                    <span>Подсказка (100)</span>
+                </button>
             </div>
+            
+            {/* Feedback Message */}
+            <AnimatePresence>
+                {message && (
+                    <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed bottom-20 bg-black/80 px-4 py-2 rounded-full text-white font-bold backdrop-blur-md z-[100]"
+                    >
+                        {message}
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };
