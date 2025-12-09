@@ -8,18 +8,21 @@ import { ThemeType } from '../types';
 // =======================
 const MobileControls: React.FC<{onMove: (dir: 'up'|'down'|'left'|'right') => void, theme?: string}> = ({onMove, theme}) => {
     const isSakura = theme === 'sakura';
-    const btnClass = `p-4 rounded-2xl active:scale-90 transition-transform shadow-lg flex items-center justify-center ${isSakura ? 'bg-pink-500 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`;
+    // Добавлен класс touch-none, чтобы предотвратить зум и скролл при быстрой игре
+    const btnClass = `p-4 rounded-2xl active:scale-90 transition-transform shadow-lg flex items-center justify-center touch-none select-none ${isSakura ? 'bg-pink-500 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`;
     
-    // Prevent default scroll on touch
-    const preventScroll = (e: React.TouchEvent) => e.preventDefault();
+    // Универсальный обработчик для Pointer Events (работает и для мыши, и для тача)
+    const handlePress = (e: React.PointerEvent, dir: 'up'|'down'|'left'|'right') => {
+        e.preventDefault(); // Предотвращаем стандартное поведение и двойные клики
+        onMove(dir);
+    };
 
     return (
         <div className="grid grid-cols-3 gap-2 mt-6 w-full max-w-[200px] select-none touch-none">
             <div />
             <button 
                 className={btnClass} 
-                onTouchStart={(e) => { preventScroll(e); onMove('up'); }} 
-                onClick={() => onMove('up')}
+                onPointerDown={(e) => handlePress(e, 'up')}
             >
                 <ArrowUp size={24}/>
             </button>
@@ -27,22 +30,19 @@ const MobileControls: React.FC<{onMove: (dir: 'up'|'down'|'left'|'right') => voi
             
             <button 
                 className={btnClass} 
-                onTouchStart={(e) => { preventScroll(e); onMove('left'); }} 
-                onClick={() => onMove('left')}
+                onPointerDown={(e) => handlePress(e, 'left')}
             >
                 <ArrowLeft size={24}/>
             </button>
             <button 
                 className={btnClass} 
-                onTouchStart={(e) => { preventScroll(e); onMove('down'); }} 
-                onClick={() => onMove('down')}
+                onPointerDown={(e) => handlePress(e, 'down')}
             >
                 <ArrowDown size={24}/>
             </button>
             <button 
                 className={btnClass} 
-                onTouchStart={(e) => { preventScroll(e); onMove('right'); }} 
-                onClick={() => onMove('right')}
+                onPointerDown={(e) => handlePress(e, 'right')}
             >
                 <ArrowRight size={24}/>
             </button>
