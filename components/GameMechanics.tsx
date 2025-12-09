@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { RefreshCw, MousePointer2, Timer, Crown, Flag, Bomb, Eraser, Trash2 } from 'lucide-react';
+import { RefreshCw, MousePointer2, Timer, Crown, Flag, Bomb, Eraser, Trash2, Repeat } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeType } from '../types';
 
 /* ==========================================
-   GAME: 2048 (Scaled Up)
+   GAME: 2048 (Improved Animation)
    ========================================== */
 type Tile = {
   id: number;
@@ -16,15 +16,14 @@ type Tile = {
   toDelete?: boolean;
 };
 
-// ДОБАВЛЕНО: gameId и onSaveScore
 export const Game2048: React.FC<{theme?: ThemeType, gameId: string, onSaveScore: (gameId: string, score: number) => void}> = ({theme = 'default', gameId, onSaveScore}) => {
   const [tiles, setTiles] = useState<Tile[]>([]);
   const [score, setScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
   const [hasWon, setHasWon] = useState(false);
   const [keepPlaying, setKeepPlaying] = useState(false);
-  const [isAnimating, setIsAnimating] = useState(false);
   const idCounter = useRef(1);
+  const isMoving = useRef(false); 
   const BOARD_SIZE = 4;
   
   const isSakura = theme === 'sakura';
@@ -37,13 +36,13 @@ export const Game2048: React.FC<{theme?: ThemeType, gameId: string, onSaveScore:
     setGameOver(false);
     setHasWon(false);
     setKeepPlaying(false);
-    setIsAnimating(false);
     idCounter.current = 1;
+    isMoving.current = false;
     setTimeout(() => {
         const t1 = createRandomTile([]);
         const t2 = createRandomTile([t1]);
         setTiles([t1, t2]);
-    }, 50);
+    }, 100);
   };
 
   const createRandomTile = (currentTiles: Tile[]): Tile => {
@@ -68,96 +67,104 @@ export const Game2048: React.FC<{theme?: ThemeType, gameId: string, onSaveScore:
   };
 
   const move = useCallback((direction: 'up'|'down'|'left'|'right') => {
-    if (gameOver || (hasWon && !keepPlaying) || isAnimating) return;
+    if (gameOver || (hasWon && !keepPlaying) || isMoving.current) return;
 
-    setTiles(prevTiles => {
-      let newTiles = prevTiles.map(t => ({ ...t, isNew: false, isMerging: false }));
-      let moved = false;
-      let scoreAdd = 0;
-      let won = false;
+    let currentTiles = tiles.filter(t => !t.toDelete).map(t => ({ ...t, isNew: false, isMerging: false }));
+    let moved = false;
+    let scoreAdd = 0;
+    let won = false;
 
-      const sortFn = (a: Tile, b: Tile) => {
+    const sortFn = (a: Tile, b: Tile) => {
         if (direction === 'left') return a.c - b.c;
         if (direction === 'right') return b.c - a.c;
         if (direction === 'up') return a.r - b.r;
         return b.r - a.r; 
-      };
-      
-      const changes: Tile[] = []; 
-      let currentScore = 0; // Локальная переменная для счета
-      setScore(s => { currentScore = s; return s; }); // Получаем текущий счет
+    };
 
-      const processLine = (group: Tile[]) => {
-         const stack: Tile[] = [];
-         for (let tile of group) {
-             const last = stack.length > 0 ? stack[stack.length - 1] : null;
-             if (last && !last.isMerging && !last.toDelete && last.val === tile.val) {
-                 tile.r = last.r;
-                 tile.c = last.c;
-                 tile.toDelete = true;
-                 changes.push(tile); 
-                 last.val *= 2;
-                 last.isMerging = true;
-                 scoreAdd += last.val;
-                 if (last.val === 2048) won = true;
-                 moved = true;
-             } else {
-                 let nextPos = stack.length;
-                 if (direction === 'right' || direction === 'down') nextPos = 3 - stack.length;
-                 const targetR = (direction === 'left' || direction === 'right') ? tile.r : nextPos;
-                 const targetC = (direction === 'left' || direction === 'right') ? nextPos : tile.c;
-                 if (tile.r !== targetR || tile.c !== targetC) {
-                     tile.r = targetR;
-                     tile.c = targetC;
-                     moved = true;
-                 }
-                 stack.push(tile);
-                 changes.push(tile);
-             }
-         }
-      };
+    const lines = [];
+    if (direction === 'left' || direction === 'right') {
+        for(let r=0; r<BOARD_SIZE; r++) lines.push(currentTiles.filter(t => t.r === r).sort(sortFn));
+    } else {
+        for(let c=0; c<BOARD_SIZE; c++) lines.push(currentTiles.filter(t => t.c === c).sort(sortFn));
+    }
 
-      if (direction === 'left' || direction === 'right') {
-          for(let r=0; r<BOARD_SIZE; r++) processLine(newTiles.filter(t => t.r === r).sort(sortFn));
-      } else {
-          for(let c=0; c<BOARD_SIZE; c++) processLine(newTiles.filter(t => t.c === c).sort(sortFn));
-      }
+    const nextTiles: Tile[] = [];
+    const mergedIds = new Set<number>();
 
-      if (moved) {
-          setIsAnimating(true);
-          setScore(s => s + scoreAdd);
-          if (won && !hasWon) setHasWon(true);
-          setTimeout(() => {
-              setTiles(prev => {
-                  const cleaned = prev.filter(t => !t.toDelete);
-                  const withNew = [...cleaned, createRandomTile(cleaned)];
-                  // Check game over
-                  let canMove = false;
-                  if (withNew.length === 16) {
-                      for(let r=0; r<4; r++) {
-                          for(let c=0; c<4; c++) {
-                             const curr = withNew.find(t=>t.r===r && t.c===c);
-                             const right = withNew.find(t=>t.r===r && t.c===c+1);
-                             const down = withNew.find(t=>t.r===r+1 && t.c===c);
-                             if (curr && right && curr.val === right.val) canMove = true;
-                             if (curr && down && curr.val === down.val) canMove = true;
-                          }
-                      }
-                  }
-                  if (withNew.length === 16 && !canMove) {
-                      setGameOver(true);
-                      // СОХРАНЕНИЕ СЧЕТА: на Game Over
-                      onSaveScore(gameId, currentScore + scoreAdd);
-                  }
-                  return withNew;
-              });
-              setIsAnimating(false);
-          }, 150); 
-          return changes;
-      }
-      return prevTiles;
+    lines.forEach(line => {
+        const stack: Tile[] = [];
+        line.forEach(tile => {
+            const last = stack.length > 0 ? stack[stack.length - 1] : null;
+            
+            if (last && !mergedIds.has(last.id) && last.val === tile.val) {
+                const newVal = last.val * 2;
+                scoreAdd += newVal;
+                if (newVal === 2048) won = true;
+                mergedIds.add(last.id); 
+                
+                last.val = newVal;
+                last.isMerging = true;
+                
+                tile.r = last.r;
+                tile.c = last.c;
+                tile.toDelete = true;
+                nextTiles.push(tile); 
+                moved = true;
+            } else {
+                let targetR = tile.r;
+                let targetC = tile.c;
+
+                if (direction === 'left') { targetR = tile.r; targetC = stack.length; }
+                else if (direction === 'right') { targetR = tile.r; targetC = BOARD_SIZE - 1 - stack.length; }
+                else if (direction === 'up') { targetR = stack.length; targetC = tile.c; }
+                else if (direction === 'down') { targetR = BOARD_SIZE - 1 - stack.length; targetC = tile.c; }
+
+                if (tile.r !== targetR || tile.c !== targetC) {
+                    moved = true;
+                    tile.r = targetR;
+                    tile.c = targetC;
+                }
+                stack.push(tile);
+                nextTiles.push(tile);
+            }
+        });
     });
-  }, [gameOver, hasWon, keepPlaying, isAnimating, onSaveScore, gameId]); // score убран из зависимостей, т.к. используется currentScore
+
+    if (moved) {
+        isMoving.current = true;
+        setTiles(nextTiles);
+        setScore(s => s + scoreAdd);
+        if (won && !hasWon) setHasWon(true);
+
+        setTimeout(() => {
+            setTiles(prev => {
+                const cleaned = prev.filter(t => !t.toDelete);
+                const withNew = [...cleaned, createRandomTile(cleaned)];
+                
+                if (withNew.length === 16) {
+                    let canMove = false;
+                    const check = (r:number, c:number) => {
+                        const val = withNew.find(t=>t.r===r && t.c===c)?.val;
+                        if(!val) return false;
+                        const right = withNew.find(t=>t.r===r && t.c===c+1)?.val;
+                        const down = withNew.find(t=>t.r===r+1 && t.c===c)?.val;
+                        return val === right || val === down;
+                    }
+                    for(let r=0; r<4; r++) 
+                        for(let c=0; c<4; c++) 
+                            if(check(r,c)) canMove = true;
+                    
+                    if (!canMove) {
+                        setGameOver(true);
+                        onSaveScore(gameId, score + scoreAdd);
+                    }
+                }
+                isMoving.current = false;
+                return withNew;
+            });
+        }, 150);
+    }
+  }, [tiles, gameOver, hasWon, keepPlaying, score, onSaveScore, gameId]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -165,7 +172,6 @@ export const Game2048: React.FC<{theme?: ThemeType, gameId: string, onSaveScore:
       if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyS','KeyA','KeyD'].includes(code)) {
         e.preventDefault();
       }
-
       if (code === 'ArrowUp' || code === 'KeyW') move('up');
       if (code === 'ArrowDown' || code === 'KeyS') move('down');
       if (code === 'ArrowLeft' || code === 'KeyA') move('left');
@@ -176,7 +182,6 @@ export const Game2048: React.FC<{theme?: ThemeType, gameId: string, onSaveScore:
   }, [move]);
 
   const getTileColor = (val: number) => {
-    // Sakura Theme Override
     if (isSakura) {
         const sakuraColors: {[key:number]:string} = {
             2: 'bg-pink-100 text-pink-800', 4: 'bg-pink-200 text-pink-800',
@@ -187,7 +192,6 @@ export const Game2048: React.FC<{theme?: ThemeType, gameId: string, onSaveScore:
         };
         return sakuraColors[val] || 'bg-black text-white';
     }
-
     const colors: {[key:number]:string} = {
       2: 'bg-[#eee4da] text-[#776e65]', 4: 'bg-[#ede0c8] text-[#776e65]',
       8: 'bg-[#f2b179] text-white', 16: 'bg-[#f59563] text-white', 32: 'bg-[#f67c5f] text-white', 64: 'bg-[#f65e3b] text-white',
@@ -195,8 +199,6 @@ export const Game2048: React.FC<{theme?: ThemeType, gameId: string, onSaveScore:
     };
     return colors[val] || 'bg-[#3c3a32] text-white';
   };
-
-  const getPosition = (index: number) => `calc(1.5% + ${index * 24.625}%)`;
 
   return (
     <div className="flex flex-col items-center w-full max-w-[500px] px-4 select-none relative">
@@ -210,33 +212,41 @@ export const Game2048: React.FC<{theme?: ThemeType, gameId: string, onSaveScore:
         </button>
       </div>
 
-      <div className={`relative rounded-xl w-full aspect-square overflow-hidden shadow-2xl ${isSakura ? 'bg-pink-200' : 'bg-[#bbada0]'}`}>
-        <div className="absolute inset-0 p-[1.5%] grid grid-cols-4 grid-rows-4 gap-[1.5%]">
+      <div className={`relative rounded-xl w-full aspect-square p-[1.5%] shadow-2xl ${isSakura ? 'bg-pink-200' : 'bg-[#bbada0]'}`}>
+        <div className="grid grid-cols-4 grid-rows-4 gap-[1.5%] w-full h-full absolute inset-0 p-[1.5%]">
             {Array.from({length: 16}).map((_, i) => (
                 <div key={i} className={`rounded-lg w-full h-full ${isSakura ? 'bg-pink-300/50' : 'bg-[#cdc1b4]'}`} />
             ))}
         </div>
+        
         <AnimatePresence>
             {tiles.map(tile => (
                 <motion.div
-                    key={`${tile.id}`} 
+                    key={tile.id}
+                    layoutId={`tile-${tile.id}`}
                     initial={tile.isNew ? { scale: 0, opacity: 0 } : false}
                     animate={{ 
-                        left: getPosition(tile.c),
-                        top: getPosition(tile.r),
-                        scale: tile.isMerging ? [1, 1.15, 1] : 1,
-                        opacity: tile.toDelete ? 0 : 1, 
-                        zIndex: tile.toDelete ? 0 : 10 
+                        scale: tile.isMerging ? [1, 1.2, 1] : 1,
+                        opacity: tile.toDelete ? 0 : 1,
                     }}
-                    transition={{ type: "spring", stiffness: 500, damping: 35, duration: 0.15 }}
-                    className={`absolute w-[23.125%] h-[23.125%] rounded-lg flex items-center justify-center font-bold text-3xl md:text-4xl shadow-sm ${getTileColor(tile.val)}`}
+                    transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                    style={{
+                        position: 'absolute',
+                        width: '23.125%',
+                        height: '23.125%',
+                        left: `calc(1.5% + ${tile.c * (23.125 + 1.5)}%)`,
+                        top: `calc(1.5% + ${tile.r * (23.125 + 1.5)}%)`,
+                        zIndex: tile.toDelete ? 0 : 10
+                    }}
+                    className={`rounded-lg flex items-center justify-center font-bold text-3xl md:text-4xl shadow-sm ${getTileColor(tile.val)}`}
                 >
                     {tile.val}
                 </motion.div>
             ))}
         </AnimatePresence>
+
         {(gameOver || (hasWon && !keepPlaying)) && (
-            <div className="absolute inset-0 bg-[#edc22e]/90 z-20 flex flex-col items-center justify-center text-white animate-in fade-in duration-300 backdrop-blur-sm">
+            <div className="absolute inset-0 bg-black/60 z-50 flex flex-col items-center justify-center text-white rounded-xl backdrop-blur-sm animate-in fade-in">
                 <h2 className="text-4xl font-bold mb-4 drop-shadow-md">{hasWon ? 'You Won!' : 'Game Over'}</h2>
                 <div className="flex gap-4">
                      <button onClick={startNewGame} className="px-6 py-3 bg-white text-[#776e65] font-bold rounded-lg shadow-lg hover:scale-105 transition-transform">Try Again</button>
@@ -252,9 +262,8 @@ export const Game2048: React.FC<{theme?: ThemeType, gameId: string, onSaveScore:
 };
 
 /* ==========================================
-   GAME: Snake (Scaled Up)
+   GAME: Snake
    ========================================== */
-// ДОБАВЛЕНО: gameId и onSaveScore
 export const SnakeGame: React.FC<{theme?: ThemeType, gameId: string, onSaveScore: (gameId: string, score: number) => void}> = ({theme = 'default', gameId, onSaveScore}) => {
     const GRID_SIZE = 20;
     const [snake, setSnake] = useState<{x:number,y:number}[]>([
@@ -303,13 +312,11 @@ export const SnakeGame: React.FC<{theme?: ThemeType, gameId: string, onSaveScore
 
             if (head.x < 0 || head.x >= GRID_SIZE || head.y < 0 || head.y >= GRID_SIZE) {
                 setGameOver(true);
-                // СОХРАНЕНИЕ СЧЕТА: на Game Over
                 onSaveScore(gameId, score);
                 return prev;
             }
             if (prev.some(s => s.x === head.x && s.y === head.y)) {
                 setGameOver(true);
-                // СОХРАНЕНИЕ СЧЕТА: на Game Over
                 onSaveScore(gameId, score);
                 return prev;
             }
@@ -453,7 +460,6 @@ export const SnakeGame: React.FC<{theme?: ThemeType, gameId: string, onSaveScore
 /* ==========================================
    GAME: Dino Run (Authentic Blocky Style)
    ========================================== */
-// ДОБАВЛЕНО: gameId и onSaveScore
 export const DinoGame: React.FC<{theme?: ThemeType, gameId: string, onSaveScore: (gameId: string, score: number) => void}> = ({theme = 'default', gameId, onSaveScore}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameState = useRef({
@@ -469,88 +475,54 @@ export const DinoGame: React.FC<{theme?: ThemeType, gameId: string, onSaveScore:
   const drawDino = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, ducking: boolean, legOffset: number) => {
      ctx.fillStyle = isSakura ? '#be185d' : '#535353'; // Pink or Dark Grey
 
-     // "Pixel" size helper
      const p = 4; 
 
      if (ducking) {
-         // DUCKING SPRITE (Flatter)
-         // Body (Long horizontal)
          ctx.fillRect(x, y + 20, 50, 15);
-         
-         // Head (Lowered, sticking out)
          ctx.fillRect(x + 50, y + 20, 16, 15);
-         // Jaw gap
          ctx.clearRect(x + 50, y + 28, 8, 2);
-
-         // Eye (White hole)
          ctx.fillStyle = isSakura ? '#fce7f3' : '#1a1c29'; 
          ctx.fillRect(x + 54, y + 22, 2, 2);
          ctx.fillStyle = isSakura ? '#be185d' : '#535353';
-         
-         // Feet Animation
          const tick = Math.floor(legOffset / 6) % 2 === 0;
          if (tick) ctx.fillRect(x + 15, y + 35, 10, 4);
          else ctx.fillRect(x + 35, y + 35, 10, 4);
-
      } else {
-         // STANDING T-REX SPRITE (Authentic Blocky Construction)
-
-         // 1. Head (Top Box)
-         ctx.fillRect(x + 20, y, 20, 12); // Skull
-         ctx.fillRect(x + 20, y + 12, 12, 8); // Cheek
-         ctx.fillRect(x + 32, y + 16, 8, 4); // Lower Jaw
-
-         // Eye (White pixel)
+         ctx.fillRect(x + 20, y, 20, 12); 
+         ctx.fillRect(x + 20, y + 12, 12, 8); 
+         ctx.fillRect(x + 32, y + 16, 8, 4); 
          ctx.fillStyle = isSakura ? '#fce7f3' : '#1a1c29';
          ctx.fillRect(x + 24, y + 4, 4, 4);
          ctx.fillStyle = isSakura ? '#be185d' : '#535353';
-
-         // 2. Neck
          ctx.fillRect(x + 16, y + 14, 4, 10);
-
-         // 3. Body (Main Block)
          ctx.fillRect(x, y + 20, 24, 18);
-         // Chest Bump
          ctx.fillRect(x + 20, y + 24, 4, 8);
-
-         // 4. Tail (Stepped back)
          ctx.fillRect(x - 4, y + 16, 4, 12);
          ctx.fillRect(x - 8, y + 12, 4, 8);
          ctx.fillRect(x - 12, y + 8, 4, 6);
-
-         // 5. Arm (Tiny block)
          ctx.fillRect(x + 26, y + 26, 4, 2);
          ctx.fillRect(x + 30, y + 28, 2, 2);
-
-         // 6. Legs (Animated)
          const tick = Math.floor(legOffset / 6) % 2 === 0;
-         
-         // Left Leg
          if (tick) {
              ctx.fillRect(x + 4, y + 38, 4, 6); 
-             ctx.fillRect(x + 4, y + 44, 6, 2); // Foot
+             ctx.fillRect(x + 4, y + 44, 6, 2); 
          } else {
-             ctx.fillRect(x + 4, y + 36, 4, 4); // Raised
+             ctx.fillRect(x + 4, y + 36, 4, 4); 
          }
-         
-         // Right Leg
          if (!tick) {
              ctx.fillRect(x + 18, y + 38, 4, 6); 
-             ctx.fillRect(x + 18, y + 44, 6, 2); // Foot
+             ctx.fillRect(x + 18, y + 44, 6, 2); 
          } else {
-             ctx.fillRect(x + 18, y + 36, 4, 4); // Raised
+             ctx.fillRect(x + 18, y + 36, 4, 4); 
          }
      }
   };
 
   const drawCactus = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
      ctx.fillStyle = isSakura ? '#064e3b' : '#535353'; 
-     // Main stem
      ctx.fillRect(x + w/3, y, w/3, h);
-     // Arms (Blocky)
      ctx.fillRect(x, y + h/3, w/3, 4);
      ctx.fillRect(x, y + h/6, 4, h/6 + 4);
-     
      ctx.fillRect(x + 2*w/3, y + h/2, w/3, 4);
      ctx.fillRect(x + w - 4, y + h/4, 4, h/4 + 4);
   };
@@ -625,7 +597,6 @@ export const DinoGame: React.FC<{theme?: ThemeType, gameId: string, onSaveScore:
           
           if (obs.type === 'bird') {
               ctx.fillStyle = isSakura ? '#be185d' : '#535353';
-              // Blocky Bird
               ctx.fillRect(obs.x, obs.y + 10, obs.w, 10); // Body
               ctx.fillRect(obs.x + 10, obs.y, 10, 20); // Wings
           } else {
@@ -646,7 +617,6 @@ export const DinoGame: React.FC<{theme?: ThemeType, gameId: string, onSaveScore:
               dinoBox.y + dinoBox.h > obs.y
           ) {
               state.isPlaying = false;
-              // СОХРАНЕНИЕ СЧЕТА: на Game Over
               onSaveScore(gameId, Math.floor(state.score));
 
               ctx.fillStyle = 'rgba(0,0,0,0.7)';
@@ -698,24 +668,20 @@ export const DinoGame: React.FC<{theme?: ThemeType, gameId: string, onSaveScore:
         if (e.code === 'ArrowDown' || e.code === 'KeyS') gameState.current.dino.ducking = false;
     };
 
-    // ДОБАВЛЕНО: Обработка касания экрана (для телефона)
     const handleTouchStart = (e: TouchEvent) => {
-        e.preventDefault(); // Чтобы экран не скроллился при тапе
+        e.preventDefault(); 
         if (!gameState.current.isPlaying) {
             start();
         } else {
-            // Реагируем на любой тап как на прыжок
             jump();
         }
     };
 
     window.addEventListener('keydown', handleKey);
     window.addEventListener('keyup', handleKeyUp);
-    // Вешаем слушатель на сам канвас
     const canvas = canvasRef.current;
     if (canvas) canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
     
-    // ... (код отрисовки начального экрана остается) ...
     setTimeout(() => {
         if(canvasRef.current) {
             const ctx = canvasRef.current.getContext('2d');
@@ -724,7 +690,6 @@ export const DinoGame: React.FC<{theme?: ThemeType, gameId: string, onSaveScore:
                 ctx.fillRect(0,0,canvasRef.current.width, canvasRef.current.height);
                 ctx.fillStyle = isSakura ? '#be185d' : '#fff';
                 ctx.font = '20px monospace';
-                // Пишем универсальный текст
                 ctx.fillText("Press Space or Tap to Jump", 150, 130); 
                 drawDino(ctx, 50, 250 - 20 - 44, 40, 44, false, 0);
                 ctx.fillStyle = isSakura ? '#db2777' : '#535353';
@@ -739,16 +704,15 @@ export const DinoGame: React.FC<{theme?: ThemeType, gameId: string, onSaveScore:
         if (canvas) canvas.removeEventListener('touchstart', handleTouchStart);
         cancelAnimationFrame(reqRef.current);
     };
-  }, [theme, onSaveScore, gameId]); // Добавлены зависимости
+  }, [theme, onSaveScore, gameId]);
 
   return (
-    // ИЗМЕНЕНИЕ: w-full h-auto для адаптивности + touch-none для предотвращения конфликтов
     <canvas 
         ref={canvasRef} 
         width={600} 
         height={250} 
         className={`rounded-xl border shadow-2xl cursor-pointer w-full h-auto object-contain max-w-[900px] touch-none ${isSakura ? 'border-pink-300 bg-pink-50' : 'border-white/10 bg-[#1a1c29]'}`}
-        onClick={() => { if (!gameState.current.isPlaying) start(); }} // Оставляем клик для мышки/старта
+        onClick={() => { if (!gameState.current.isPlaying) start(); }}
     />
   );
 };
@@ -756,7 +720,6 @@ export const DinoGame: React.FC<{theme?: ThemeType, gameId: string, onSaveScore:
 /* ==========================================
    GAME: Clicker
    ========================================== */
-// ДОБАВЛЕНО: gameId и onSaveScore
 export const ClickerGame: React.FC<{onEarnCoins: (amount: number) => void, gameId: string, onSaveScore: (gameId: string, score: number) => void}> = ({onEarnCoins, gameId, onSaveScore}) => {
   const [count, setCount] = useState(0);
   const [level, setLevel] = useState(1);
@@ -791,18 +754,14 @@ export const ClickerGame: React.FC<{onEarnCoins: (amount: number) => void, gameI
       }, 1000);
   };
   
-  // Добавлена передача finalTimeLeft, чтобы избежать использования устаревшего стейта
   const endGame = useCallback((finalTimeLeft: number) => { 
       if (timerRef.current) clearInterval(timerRef.current);
       setIsPlaying(false);
       setShowResult(true);
       
-      // СОХРАНЕНИЕ СЧЕТА: на Game End
-      // Сохраняем счет, который был к моменту окончания игры
       setCount(finalCount => {
           onSaveScore(gameId, finalCount);
           
-          // Calculate Reward
           let reward = 0;
           let finalRank = 'Начинающий';
           if (finalCount > 100) { reward = 50; finalRank = 'Любитель'; }
@@ -812,12 +771,11 @@ export const ClickerGame: React.FC<{onEarnCoins: (amount: number) => void, gameI
           setRank(finalRank);
           if (reward > 0) onEarnCoins(reward);
 
-          return finalCount; // Возвращаем текущий счет
+          return finalCount;
       });
 
   }, [onSaveScore, gameId, onEarnCoins]);
   
-  // Обновляем useEffect для таймера, чтобы использовать новую логику endGame
   useEffect(() => {
       if (!isPlaying) return;
       
@@ -900,7 +858,6 @@ export const ClickerGame: React.FC<{onEarnCoins: (amount: number) => void, gameI
 /* ==========================================
    GAME: Minesweeper
    ========================================== */
-// ДОБАВЛЕНО: gameId и onSaveScore
 export const MinesweeperGame: React.FC<{gameId: string, onSaveScore: (gameId: string, score: number) => void}> = ({gameId, onSaveScore}) => {
   const ROWS = 10;
   const COLS = 10;
@@ -936,13 +893,10 @@ export const MinesweeperGame: React.FC<{gameId: string, onSaveScore: (gameId: st
       
       if (firstClick) {
           setFirstClick(false);
-          // Place Mines now
           let minesPlaced = 0;
           while(minesPlaced < MINES) {
               const mr = Math.floor(Math.random() * ROWS);
               const mc = Math.floor(Math.random() * COLS);
-              
-              // Ensure safe zone (clicked cell + neighbors)
               if (Math.abs(mr - r) <= 1 && Math.abs(mc - c) <= 1) continue;
 
               if(!newGrid[mr][mc].isMine) {
@@ -951,7 +905,6 @@ export const MinesweeperGame: React.FC<{gameId: string, onSaveScore: (gameId: st
               }
           }
 
-          // Calculate numbers
           for(let i=0; i<ROWS; i++){
               for(let j=0; j<COLS; j++){
                   if(newGrid[i][j].isMine) continue;
@@ -970,7 +923,6 @@ export const MinesweeperGame: React.FC<{gameId: string, onSaveScore: (gameId: st
           newGrid[r][c].isRevealed = true;
           setGrid(newGrid);
           setGameOver(true);
-          // СОХРАНЕНИЕ СЧЕТА: на Game Over (0 - проигрыш)
           onSaveScore(gameId, 0); 
           return;
       }
@@ -988,11 +940,9 @@ export const MinesweeperGame: React.FC<{gameId: string, onSaveScore: (gameId: st
       floodFill(r,c);
       setGrid(newGrid);
 
-      // Check Win
       const unrevealedSafe = newGrid.flat().filter(cell => !cell.isMine && !cell.isRevealed).length;
       if(unrevealedSafe === 0) {
           setWin(true);
-          // СОХРАНЕНИЕ СЧЕТА: на Win (1 - победа)
           onSaveScore(gameId, 1);
       }
   };
@@ -1037,13 +987,9 @@ export const MinesweeperGame: React.FC<{gameId: string, onSaveScore: (gameId: st
 };
 
 /* ==========================================
-   GAME: Checkers (Simple Version)
+   GAME: Checkers (Fixed Movement & Capture)
    ========================================== */
 export const CheckersGame: React.FC = () => {
-    // 8x8 Board
-    // 0: empty, 1: red, 2: white, 3: red king, 4: white king
-    // Black cells are where pieces go.
-    
     type Piece = { player: 'red' | 'white', isKing: boolean } | null;
     type Board = (Piece)[][];
 
@@ -1076,123 +1022,113 @@ export const CheckersGame: React.FC = () => {
         const moves: {r:number, c:number, isCapture: boolean, mid?: {r:number, c:number}}[] = [];
         if(!piece) return [];
         
-        // Directions: Red (-1), White (+1), King (both)
-        const dirs = piece.isKing ? [[-1,-1],[-1,1],[1,-1],[1,1]] : piece.player==='red' ? [[-1,-1],[-1,1]] : [[1,-1],[-1,-1],[1,1],[-1,1]];
-        // Backward capture for regular pieces
-        const capDirs = piece.isKing ? [[-1,-1],[-1,1],[1,-1],[1,1]] : piece.player==='red' ? [[-1,-1],[-1,1],[1,-1],[1,1]] : [[1,-1],[1,1],[-1,-1],[-1,1]];
+        let dirs: number[][] = [];
+        if (piece.isKing) {
+            dirs = [[-1,-1], [-1,1], [1,-1], [1,1]];
+        } else {
+            if (piece.player === 'red') dirs = [[-1,-1], [-1,1]]; 
+            else dirs = [[1,-1], [1,1]];
+        }
 
-        // Regular Moves (Only if not in multi-jump sequence)
         if (!mustCaptureWith) {
              dirs.forEach(([dr, dc]) => {
                 const nr = r + dr;
                 const nc = c + dc;
-                if(nr>=0 && nr<8 && nc>=0 && nc<8 && (r+nr)%2===1 && !b[nr][nc]) { // Добавлена проверка на черную клетку
+                if(nr>=0 && nr<8 && nc>=0 && nc<8 && !b[nr][nc]) {
                     moves.push({r:nr, c:nc, isCapture: false});
                 }
              });
         }
 
-        // Capture Moves
-        capDirs.forEach(([dr, dc]) => {
-            const jr = r + dr*2;
-            const jc = c + dc*2;
-            const mr = r + dr;
-            const mc = c + dc;
+        const captureDirs = [[-1,-1], [-1,1], [1,-1], [1,1]];
+        
+        captureDirs.forEach(([dr, dc]) => {
+            const midR = r + dr;
+            const midC = c + dc;
+            const destR = r + dr*2;
+            const destC = c + dc*2;
             
-            if(jr>=0 && jr<8 && jc>=0 && jc<8 && (r+jr)%2===1 && !b[jr][jc]) { // Добавлена проверка на черную клетку
-                const mid = b[mr][mc];
-                if(mid && mid.player !== piece.player) {
-                    moves.push({r:jr, c:jc, isCapture: true, mid: {r:mr, c:mc}});
+            if(destR>=0 && destR<8 && destC>=0 && destC<8) {
+                const midPiece = b[midR][midC];
+                const destSpot = b[destR][destC]; 
+
+                if (midPiece && midPiece.player !== piece.player && !destSpot) {
+                    moves.push({r:destR, c:destC, isCapture: true, mid: {r:midR, c:midC}});
                 }
             }
         });
 
-        return moves.filter(m => (m.isCapture && piece.player==='red' && m.r < r) || (m.isCapture && piece.player==='white' && m.r > r) || piece.isKing || !m.isCapture);
+        return moves;
     };
 
     const handleClick = (r: number, c: number) => {
         const clickedPiece = board[r][c];
 
-        // 1. SELECT PIECE
         if(clickedPiece?.player === turn) {
-            // If we are in a multi-jump sequence, only allow selecting the specific piece
             if (mustCaptureWith && (mustCaptureWith.r !== r || mustCaptureWith.c !== c)) return;
 
             const moves = getValidMoves(board, r, c, clickedPiece);
+            const captureMoves = moves.filter(m => m.isCapture);
             
-            // Если есть обязательный ход захвата, показываем только его
-            const allCaptures = moves.filter(m => m.isCapture);
-            if (allCaptures.length > 0) {
+            if (captureMoves.length > 0) {
                  setSelected({r,c});
-                 setValidMoves(allCaptures);
+                 setValidMoves(captureMoves);
             } else if (!mustCaptureWith) {
-                // Если нет обязательных захватов, показываем все доступные ходы
                 setSelected({r,c});
                 setValidMoves(moves);
-            } else {
-                // Если должны были захватить, но захватов нет (ошибка или конец цепи)
-                setSelected(null);
-                setValidMoves([]);
-                setMustCaptureWith(null);
             }
             return;
         }
         
-        // 2. MOVE PIECE
         const move = validMoves.find(m => m.r===r && m.c===c);
         if(selected && move) {
             const newBoard = board.map(row => [...row]);
             const piece = newBoard[selected.r][selected.c]!;
             
-            // Execute Move
             newBoard[r][c] = piece;
             newBoard[selected.r][selected.c] = null;
             
-            // Remove captured
             if (move.isCapture && move.mid) {
                 newBoard[move.mid.r][move.mid.c] = null;
             }
 
-            // Promote King
             let promoted = false;
             if(!piece.isKing && ((piece.player==='red' && r===0) || (piece.player==='white' && r===7))) {
                 piece.isKing = true;
                 promoted = true;
             }
 
-            // Check Multi-Jump
             let canContinue = false;
             if (move.isCapture && !promoted) {
-                 const followUpMoves = getValidMoves(newBoard, r, c, piece);
-                 if (followUpMoves.some(m => m.isCapture)) {
+                 const nextMoves = getValidMoves(newBoard, r, c, piece);
+                 const nextCaptures = nextMoves.filter(m => m.isCapture);
+                 
+                 if (nextCaptures.length > 0) {
                      canContinue = true;
                      setBoard(newBoard);
                      setMustCaptureWith({r,c});
                      setSelected({r,c});
-                     setValidMoves(followUpMoves.filter(m => m.isCapture));
-                     return; // Turn does not change
+                     setValidMoves(nextCaptures);
+                     return; 
                  }
             }
             
-            // End Turn
             setBoard(newBoard);
             setTurn(turn === 'red' ? 'white' : 'red');
             setSelected(null);
             setValidMoves([]);
             setMustCaptureWith(null);
-
-            // TODO: Check Win condition (no pieces left for opponent)
         }
     };
 
     return (
         <div className="flex flex-col items-center">
-            <div className="mb-4 flex justify-between w-[400px]">
-                <span className={`font-bold text-xl ${turn==='red' ? 'text-red-500' : 'text-textMuted'}`}>Red's Turn</span>
-                <span className={`font-bold text-xl ${turn==='white' ? 'text-white' : 'text-textMuted'}`}>White's Turn</span>
-                <button onClick={initGame}><RefreshCw size={18}/></button>
+            <div className="mb-4 flex justify-between w-[320px] md:w-[400px]">
+                <span className={`font-bold text-lg md:text-xl ${turn==='red' ? 'text-red-500' : 'text-textMuted'}`}>Красные</span>
+                <button onClick={initGame} className="p-2 bg-white/10 rounded-full hover:bg-white/20"><RefreshCw size={18}/></button>
+                <span className={`font-bold text-lg md:text-xl ${turn==='white' ? 'text-white' : 'text-textMuted'}`}>Белые</span>
             </div>
-            <div className="grid grid-cols-8 border-[8px] border-[#4a3627] shadow-2xl rounded-sm">
+            <div className="grid grid-cols-8 border-[8px] border-[#4a3627] shadow-2xl rounded-sm select-none">
                 {board.map((row, r) => row.map((cell, c) => {
                     const isBlack = (r+c)%2===1;
                     const isSelected = selected?.r===r && selected?.c===c;
@@ -1203,22 +1139,25 @@ export const CheckersGame: React.FC = () => {
                             key={`${r}-${c}`}
                             onClick={() => isBlack && handleClick(r,c)}
                             className={`
-                                w-12 h-12 md:w-16 md:h-16 flex items-center justify-center relative
+                                w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 flex items-center justify-center relative
                                 ${isBlack ? 'bg-[#704d33]' : 'bg-[#eecfa1]'}
-                                ${isValid ? 'after:content-[""] after:absolute after:w-4 after:h-4 after:bg-green-500/80 after:rounded-full after:shadow-[0_0_10px_lime]' : ''}
+                                ${isValid ? 'after:content-[""] after:absolute after:w-3 after:h-3 after:bg-green-500 after:rounded-full after:shadow-[0_0_10px_lime] after:z-10' : ''}
                             `}
                         >
                             {cell && (
-                                <div className={`
-                                    w-[80%] h-[80%] rounded-full shadow-[0_4px_6px_rgba(0,0,0,0.6),inset_0_-4px_4px_rgba(0,0,0,0.3),inset_0_2px_4px_rgba(255,255,255,0.3)] 
-                                    flex items-center justify-center
-                                    ${cell.player === 'red' 
-                                        ? 'bg-gradient-to-br from-red-500 to-red-700 ring-1 ring-red-900' 
-                                        : 'bg-gradient-to-br from-slate-100 to-slate-300 ring-1 ring-slate-400'}
-                                    ${isSelected ? 'ring-4 ring-yellow-400 scale-105 transition-transform' : ''}
-                                `}>
+                                <motion.div 
+                                    layout 
+                                    className={`
+                                        w-[80%] h-[80%] rounded-full shadow-[0_4px_6px_rgba(0,0,0,0.6),inset_0_-4px_4px_rgba(0,0,0,0.3),inset_0_2px_4px_rgba(255,255,255,0.3)] 
+                                        flex items-center justify-center relative z-20
+                                        ${cell.player === 'red' 
+                                            ? 'bg-gradient-to-br from-red-500 to-red-700 ring-1 ring-red-900' 
+                                            : 'bg-gradient-to-br from-slate-100 to-slate-300 ring-1 ring-slate-400'}
+                                        ${isSelected ? 'ring-4 ring-yellow-400 scale-110' : ''}
+                                    `}
+                                >
                                     {cell.isKing && <Crown size={20} className={cell.player==='red'?'text-red-950':'text-slate-800'} strokeWidth={2.5}/>}
-                                </div>
+                                </motion.div>
                             )}
                         </div>
                     );
@@ -1249,7 +1188,7 @@ export const PaintGame: React.FC = () => {
         
         const draw = (ev: MouseEvent) => {
             ctx.lineTo(ev.clientX - rect.left, ev.clientY - rect.top);
-            ctx.strokeStyle = tool === 'eraser' ? '#151621' : color; // Match bg color
+            ctx.strokeStyle = tool === 'eraser' ? '#151621' : color; 
             ctx.lineWidth = size;
             ctx.lineCap = 'round';
             ctx.stroke();
@@ -1264,7 +1203,6 @@ export const PaintGame: React.FC = () => {
         window.addEventListener('mouseup', stop);
     };
 
-    // ДОБАВЛЕНО: Обработчик касаний для мобильных
     const startDrawTouch = (e: React.TouchEvent) => {
         const canvas = canvasRef.current;
         if(!canvas || e.touches.length === 0) return;
@@ -1313,7 +1251,6 @@ export const PaintGame: React.FC = () => {
 
     return (
         <div className="flex flex-col items-center gap-4 w-full h-full p-4">
-            {/* Панель инструментов: добавим flex-wrap, чтобы кнопки переносились на новую строку если экран узкий */}
             <div className="flex flex-wrap justify-center gap-4 p-2 bg-panel rounded-xl border border-white/10">
                 <input type="color" value={color} onChange={e => setColor(e.target.value)} className="w-8 h-8 rounded cursor-pointer"/>
                 <input type="range" min="1" max="20" value={size} onChange={e => setSize(Number(e.target.value))} className="w-24"/>
@@ -1322,13 +1259,12 @@ export const PaintGame: React.FC = () => {
                 <button onClick={clear} className="p-1.5 hover:bg-red-500/20 rounded hover:text-red-400"><Trash2 size={18}/></button>
             </div>
             
-            {/* ИЗМЕНЕНИЕ: w-full h-auto для канваса */}
             <canvas 
                 ref={canvasRef} 
                 width={800} 
                 height={450} 
                 onMouseDown={startDraw}
-                onTouchStart={startDrawTouch} // ДОБАВЛЕНО: Обработчик касаний
+                onTouchStart={startDrawTouch}
                 className="bg-[#151621] border border-white/10 shadow-xl rounded-xl cursor-crosshair w-full h-auto max-w-[800px] touch-none"
             />
         </div>
@@ -1338,7 +1274,6 @@ export const PaintGame: React.FC = () => {
 /* ==========================================
    GAME: Tetris (Full Logic Restored)
    ========================================== */
-// ДОБАВЛЕНО: gameId и onSaveScore
 export const TetrisGame: React.FC<{gameId: string, onSaveScore: (gameId: string, score: number) => void}> = ({gameId, onSaveScore}) => {
     const COLS = 10;
     const ROWS = 20;
@@ -1346,7 +1281,6 @@ export const TetrisGame: React.FC<{gameId: string, onSaveScore: (gameId: string,
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const scoreRef = useRef(0);
     
-    // Tetromino definitions
     const SHAPES = [
         [[1,1,1,1]], // I
         [[1,1],[1,1]], // O
@@ -1380,11 +1314,9 @@ export const TetrisGame: React.FC<{gameId: string, onSaveScore: (gameId: string,
             y: 0,
             color: COLORS[typeIdx]
         };
-        // Check immediate collision (Game Over)
         if (checkCollision(0, 0, shape)) {
             gameState.current.gameOver = true;
             gameState.current.isRunning = false;
-            // СОХРАНЕНИЕ СЧЕТА: на Game Over
             onSaveScore(gameId, scoreRef.current);
         }
     };
@@ -1424,7 +1356,6 @@ export const TetrisGame: React.FC<{gameId: string, onSaveScore: (gameId: string,
                 }
             }
         }
-        // Clear lines
         for (let y = ROWS - 1; y >= 0; y--) {
             if (grid[y].every(cell => cell !== 0)) {
                 grid.splice(y, 1);
@@ -1450,14 +1381,11 @@ export const TetrisGame: React.FC<{gameId: string, onSaveScore: (gameId: string,
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // Bg
         ctx.fillStyle = '#1a1c29';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Grid
         const { grid, piece } = gameState.current;
         
-        // Draw Stack
         for (let y = 0; y < ROWS; y++) {
             for (let x = 0; x < COLS; x++) {
                 if (grid[y][x]) {
@@ -1466,7 +1394,6 @@ export const TetrisGame: React.FC<{gameId: string, onSaveScore: (gameId: string,
             }
         }
 
-        // Draw Ghost Piece
         let ghostY = piece.y;
         while(!checkCollision(0, ghostY - piece.y + 1, piece.shape)) {
             ghostY++;
@@ -1481,7 +1408,6 @@ export const TetrisGame: React.FC<{gameId: string, onSaveScore: (gameId: string,
         }
         ctx.globalAlpha = 1.0;
 
-        // Draw Active Piece
         for (let y = 0; y < piece.shape.length; y++) {
             for (let x = 0; x < piece.shape[y].length; x++) {
                 if (piece.shape[y][x]) {
@@ -1501,7 +1427,6 @@ export const TetrisGame: React.FC<{gameId: string, onSaveScore: (gameId: string,
             ctx.fillText("Press R to Restart", canvas.width/2, canvas.height/2 + 30);
         }
 
-        // Score
         ctx.fillStyle = 'white';
         ctx.font = 'bold 20px sans-serif';
         ctx.textAlign = 'left';
@@ -1513,7 +1438,6 @@ export const TetrisGame: React.FC<{gameId: string, onSaveScore: (gameId: string,
         ctx.fillStyle = color;
         ctx.fillRect(x * bs, y * bs, bs, bs);
         
-        // Bevel
         ctx.fillStyle = 'rgba(255,255,255,0.3)';
         ctx.fillRect(x * bs, y * bs, bs, 4);
         ctx.fillRect(x * bs, y * bs, 4, bs);
@@ -1599,15 +1523,13 @@ export const TetrisGame: React.FC<{gameId: string, onSaveScore: (gameId: string,
             ref={canvasRef} 
             width={COLS * BLOCK_SIZE} 
             height={ROWS * BLOCK_SIZE} 
-            // ИЗМЕНЕНИЕ: style={{ width: '100%', height: 'auto', maxWidth: '300px' }}
-            // Тетрис узкий, ему лучше ограничить ширину, чтобы не раздувался на весь монитор
             className="rounded-lg shadow-2xl border border-white/10 w-full h-auto max-w-[300px] touch-none"
         />
     );
 };
 
 /* ==========================================
-   GAME: Solitaire (Klondike)
+   GAME: Solitaire (New Design & Animation)
    ========================================== */
 type Card = { suit: 'h'|'d'|'c'|'s', val: number, faceUp: boolean, color: 'red'|'black', id: string };
 type Stack = Card[];
@@ -1615,8 +1537,8 @@ type Stack = Card[];
 export const SolitaireGame: React.FC = () => {
     const [deck, setDeck] = useState<Stack>([]);
     const [waste, setWaste] = useState<Stack>([]);
-    const [foundations, setFoundations] = useState<Stack[]>([[],[],[],[]]); // 4 foundations
-    const [tableau, setTableau] = useState<Stack[]>([[],[],[],[],[],[],[]]); // 7 cols
+    const [foundations, setFoundations] = useState<Stack[]>([[],[],[],[]]); 
+    const [tableau, setTableau] = useState<Stack[]>([[],[],[],[],[],[],[]]); 
     const [selected, setSelected] = useState<{type: 'tableau'|'waste', idx: number, cardIdx?: number} | null>(null);
 
     useEffect(() => { deal(); }, []);
@@ -1629,11 +1551,10 @@ export const SolitaireGame: React.FC = () => {
                 d.push({
                     suit: s, val: v, faceUp: false,
                     color: (s==='h'||s==='d')?'red':'black',
-                    id: `${s}${v}`
+                    id: `${s}-${v}-${Math.random()}` 
                 });
             }
         });
-        // Shuffle
         for(let i=d.length-1; i>0; i--) {
             const j = Math.floor(Math.random()*(i+1));
             [d[i], d[j]] = [d[j], d[i]];
@@ -1660,7 +1581,6 @@ export const SolitaireGame: React.FC = () => {
 
     const drawCard = () => {
         if (deck.length === 0) {
-            // Recycle waste
             const newDeck = waste.reverse().map(c => ({...c, faceUp: false}));
             setDeck(newDeck);
             setWaste([]);
@@ -1675,69 +1595,53 @@ export const SolitaireGame: React.FC = () => {
     };
 
     const handleCardClick = (type: 'tableau'|'waste'|'foundation', idx: number, cardIdx?: number) => {
-        // SELECT SOURCE
         if (!selected) {
-            if (type === 'waste') {
-                if (waste.length > 0) setSelected({type: 'waste', idx: 0});
+            if (type === 'waste' && waste.length > 0) {
+                setSelected({type: 'waste', idx: 0});
             } else if (type === 'tableau') {
                 const stack = tableau[idx];
                 if (stack.length > 0 && cardIdx !== undefined) {
                     if (stack[cardIdx].faceUp) setSelected({type: 'tableau', idx, cardIdx});
-                    else if (cardIdx === stack.length-1) {
-                         // Flip top card if needed (should be auto handled, but just in case)
-                         const newTab = [...tableau];
-                         newTab[idx][cardIdx].faceUp = true;
-                         setTableau(newTab);
-                    }
                 }
             }
             return;
         }
 
-        // MOVE LOGIC
+        if (selected.type === type && selected.idx === idx && selected.cardIdx === cardIdx) {
+            setSelected(null);
+            return;
+        }
+
         if (selected.type === 'waste') {
              const card = waste[waste.length-1];
+             
              if (type === 'tableau') {
-                 // Try move waste to tableau
                  const targetStack = tableau[idx];
                  const targetCard = targetStack.length > 0 ? targetStack[targetStack.length-1] : null;
-                 
                  if ((!targetCard && card.val === 13) || (targetCard && targetCard.color !== card.color && targetCard.val === card.val + 1)) {
-                      setTableau(prev => {
-                          const n = [...prev];
-                          n[idx].push(card);
-                          return n;
-                      });
+                      setTableau(prev => { const n=[...prev]; n[idx].push(card); return n; });
                       setWaste(prev => prev.slice(0, -1));
                       setSelected(null);
-                 } else {
-                      setSelected(null); // Invalid move deselects
-                 }
-             } else if (type === 'foundation') {
-                 // Try move waste to foundation
+                 } else setSelected(null);
+             } 
+             else if (type === 'foundation') {
                  const targetStack = foundations[idx];
                  const targetCard = targetStack.length > 0 ? targetStack[targetStack.length-1] : null;
                  if ((!targetCard && card.val === 1) || (targetCard && targetCard.suit === card.suit && targetCard.val === card.val - 1)) {
-                     setFoundations(prev => {
-                         const n = [...prev];
-                         n[idx].push(card);
-                         return n;
-                         });
+                     setFoundations(prev => { const n=[...prev]; n[idx].push(card); return n; });
                      setWaste(prev => prev.slice(0, -1));
                      setSelected(null);
-                 } else {
-                     setSelected(null);
-                 }
+                 } else setSelected(null);
              }
-        } else if (selected.type === 'tableau') {
-             // Moving from Tableau to Tableau
+        } 
+        else if (selected.type === 'tableau') {
+             const sourceStack = tableau[selected.idx];
+             const movingCards = sourceStack.slice(selected.cardIdx!);
+             const card = movingCards[0];
+
              if (type === 'tableau' && selected.idx !== idx) {
-                 const sourceStack = tableau[selected.idx];
-                 const movingCards = sourceStack.slice(selected.cardIdx!);
-                 const card = movingCards[0];
                  const targetStack = tableau[idx];
                  const targetCard = targetStack.length > 0 ? targetStack[targetStack.length-1] : null;
-
                  if ((!targetCard && card.val === 13) || (targetCard && targetCard.color !== card.color && targetCard.val === card.val + 1)) {
                      setTableau(prev => {
                          const n = [...prev];
@@ -1747,24 +1651,14 @@ export const SolitaireGame: React.FC = () => {
                          return n;
                      });
                      setSelected(null);
-                 } else {
-                     setSelected(null);
-                 }
+                 } else setSelected(null);
              }
-             // Moving Tableau to Foundation (Only one card allowed)
              else if (type === 'foundation') {
-                 const sourceStack = tableau[selected.idx];
-                 if (selected.cardIdx === sourceStack.length - 1) { // Only top card
-                     const card = sourceStack[sourceStack.length-1];
+                 if (selected.cardIdx === sourceStack.length - 1) { 
                      const targetStack = foundations[idx];
                      const targetCard = targetStack.length > 0 ? targetStack[targetStack.length-1] : null;
-
                      if ((!targetCard && card.val === 1) || (targetCard && targetCard.suit === card.suit && targetCard.val === card.val - 1)) {
-                         setFoundations(prev => {
-                             const n = [...prev];
-                             n[idx].push(card);
-                             return n;
-                         });
+                         setFoundations(prev => { const n=[...prev]; n[idx].push(card); return n; });
                          setTableau(prev => {
                              const n = [...prev];
                              n[selected.idx].pop();
@@ -1772,82 +1666,105 @@ export const SolitaireGame: React.FC = () => {
                              return n;
                          });
                          setSelected(null);
-                     } else {
-                         setSelected(null);
-                     }
-                 } else {
-                     setSelected(null);
-                 }
-             } else {
-                 setSelected(null); // Clicked same stack or invalid
-             }
+                     } else setSelected(null);
+                 } else setSelected(null);
+             } else setSelected(null);
         }
     };
 
-    const renderCard = (c: Card, onClick?: () => void, isSelected?: boolean) => (
-        <div 
-            onClick={onClick}
-            className={`
-                w-[50px] h-[75px] md:w-[60px] md:h-[90px] rounded border border-gray-300 shadow-sm flex items-center justify-center select-none cursor-pointer relative bg-white
-                ${isSelected ? 'ring-2 ring-yellow-400 transform -translate-y-2' : ''}
-            `}
-        >
-            {c.faceUp ? (
-                <div className={`text-xl font-bold ${c.color === 'red' ? 'text-red-600' : 'text-black'}`}>
-                    {['A','2','3','4','5','6','7','8','9','10','J','Q','K'][c.val-1]}
-                    <span className="text-sm ml-0.5">
-                       {c.suit === 'h' ? '♥' : c.suit === 'd' ? '♦' : c.suit === 'c' ? '♣' : '♠'}
-                    </span>
-                </div>
-            ) : (
-                <div className="w-full h-full bg-blue-800 border-2 border-white rounded opacity-90 pattern-grid-lg"></div>
-            )}
-        </div>
-    );
+    const renderCard = (c: Card, onClick?: () => void, isSelected?: boolean, isStacked?: boolean) => {
+        const getSuitIcon = (s: string) => {
+            switch(s) {
+                case 'h': return '♥';
+                case 'd': return '♦';
+                case 'c': return '♣';
+                case 's': return '♠';
+                default: return '';
+            }
+        };
+        const getValStr = (v: number) => ['A','2','3','4','5','6','7','8','9','10','J','Q','K'][v-1];
+
+        return (
+            <motion.div 
+                layoutId={c.id} 
+                onClick={onClick}
+                initial={false}
+                animate={{ scale: isSelected ? 1.05 : 1, y: isSelected ? -10 : 0 }}
+                className={`
+                    w-[50px] h-[75px] sm:w-[60px] sm:h-[90px] rounded-lg border border-gray-300 shadow-md flex select-none cursor-pointer relative bg-white overflow-hidden
+                    ${isSelected ? 'ring-2 ring-yellow-400 z-50' : ''}
+                `}
+                style={{ 
+                    paddingTop: '2px', paddingLeft: '4px' 
+                }}
+            >
+                {c.faceUp ? (
+                    <>
+                        <div className={`text-sm sm:text-base font-bold leading-none ${c.color === 'red' ? 'text-red-600' : 'text-black'}`}>
+                            <div className="flex flex-col items-center">
+                                <span>{getValStr(c.val)}</span>
+                                <span className="text-xs sm:text-sm -mt-1">{getSuitIcon(c.suit)}</span>
+                            </div>
+                        </div>
+                        <div className={`absolute bottom-1 right-1 text-2xl opacity-20 pointer-events-none ${c.color === 'red' ? 'text-red-600' : 'text-black'}`}>
+                            {getSuitIcon(c.suit)}
+                        </div>
+                    </>
+                ) : (
+                    <div className="w-full h-full bg-blue-800 border-2 border-white rounded-lg opacity-90 relative">
+                        <div className="absolute inset-2 border border-white/30 rounded-sm"></div>
+                    </div>
+                )}
+            </motion.div>
+        );
+    };
 
     return (
-        <div className="w-full max-w-[700px] flex flex-col items-center">
-            <div className="flex justify-between w-full mb-6 px-4">
-                <div className="flex gap-4">
-                    {/* Deck */}
-                    <div onClick={drawCard} className="w-[50px] h-[75px] md:w-[60px] md:h-[90px] border-2 border-dashed border-white/20 rounded flex items-center justify-center cursor-pointer hover:bg-white/5">
-                        {deck.length > 0 ? <div className="w-full h-full bg-blue-800 rounded border border-white"></div> : <RefreshCw className="text-white/50"/>}
+        <div className="w-full max-w-[600px] flex flex-col items-center">
+            <div className="flex justify-between w-full mb-6 px-2 gap-2">
+                <div className="flex gap-2">
+                    <div onClick={drawCard} className="w-[50px] h-[75px] sm:w-[60px] sm:h-[90px] border-2 border-dashed border-white/20 rounded-lg flex items-center justify-center cursor-pointer hover:bg-white/5 relative">
+                        {deck.length > 0 ? (
+                            <>
+                                <div className="absolute top-0 left-0 w-full h-full bg-blue-800 rounded-lg border border-white translate-x-[2px] translate-y-[2px]"></div>
+                                <div className="absolute top-0 left-0 w-full h-full bg-blue-800 rounded-lg border border-white"></div>
+                            </>
+                        ) : <RefreshCw className="text-white/50"/>}
                     </div>
-                    {/* Waste */}
-                    <div className="w-[50px] h-[75px] md:w-[60px] md:h-[90px]">
+                    <div className="w-[50px] h-[75px] sm:w-[60px] sm:h-[90px]">
                         {waste.length > 0 && renderCard(waste[waste.length-1], () => handleCardClick('waste', 0), selected?.type === 'waste')}
                     </div>
                 </div>
-                {/* Foundations */}
                 <div className="flex gap-2">
                     {foundations.map((f, i) => (
-                        <div key={i} onClick={() => handleCardClick('foundation', i)} className="w-[50px] h-[75px] md:w-[60px] md:h-[90px] border border-white/20 rounded bg-white/5 flex items-center justify-center">
-                            {f.length > 0 ? renderCard(f[f.length-1]) : <span className="text-white/20 text-xl">A</span>}
+                        <div key={i} onClick={() => handleCardClick('foundation', i)} className="w-[50px] h-[75px] sm:w-[60px] sm:h-[90px] border border-white/20 rounded-lg bg-white/5 flex items-center justify-center relative">
+                            {f.length > 0 ? renderCard(f[f.length-1]) : <span className="text-white/20 text-xl font-serif">A</span>}
                         </div>
                     ))}
                 </div>
             </div>
 
-            {/* Tableau */}
-            <div className="flex justify-between w-full px-2 gap-1">
+            <div className="flex justify-between w-full px-2 gap-1 min-h-[300px]">
                 {tableau.map((stack, i) => (
-                    <div key={i} className="flex flex-col relative min-h-[150px] w-[50px] md:w-[60px]">
-                        {stack.length === 0 ? (
-                            <div onClick={() => handleCardClick('tableau', i)} className="w-full h-[75px] md:h-[90px] rounded border border-white/10 bg-white/5"></div>
-                        ) : (
-                            stack.map((c, ci) => (
-                                <div key={c.id} className="absolute" style={{ top: `${ci * 25}px` }}>
-                                    {renderCard(c, () => handleCardClick('tableau', i, ci), selected?.type==='tableau' && selected.idx===i && selected.cardIdx===ci)}
-                                </div>
-                            ))
-                        )}
+                    <div key={i} className="flex flex-col relative w-[50px] sm:w-[60px]">
+                        <div onClick={() => handleCardClick('tableau', i)} className="w-full h-[75px] sm:h-[90px] rounded-lg border border-white/5 bg-white/5 absolute top-0 left-0" />
+                        
+                        {stack.map((c, ci) => (
+                            <div key={c.id} className="absolute w-full" style={{ top: `${ci * 30}px`, zIndex: ci + 1 }}>
+                                {renderCard(
+                                    c, 
+                                    () => handleCardClick('tableau', i, ci), 
+                                    selected?.type==='tableau' && selected.idx===i && selected.cardIdx!==undefined && ci >= selected.cardIdx
+                                )}
+                            </div>
+                        ))}
                     </div>
                 ))}
             </div>
             
-            <div className="mt-8">
-                <button onClick={deal} className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2">
-                    <RefreshCw size={16}/> New Deal
+            <div className="mt-8 flex gap-4">
+                <button onClick={deal} className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 transition-colors">
+                    <Repeat size={16}/> New Deal
                 </button>
             </div>
         </div>
