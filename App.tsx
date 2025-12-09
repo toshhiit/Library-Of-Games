@@ -353,6 +353,7 @@ const App: React.FC = () => {
               theme={user.activeTheme}
               onBack={handleBackToGrid} 
               onEarnCoins={handleAddCoins}
+              onSpendCoins={handleSpendCoins} /* ПЕРЕДАЕМ ФУНКЦИЮ ТРАТЫ */
               onSaveScore={handleSaveScore}
             />
         ) : (
