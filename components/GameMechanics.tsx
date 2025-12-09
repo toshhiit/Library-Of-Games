@@ -1,10 +1,57 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { RefreshCw, MousePointer2, Timer, Crown, Flag, Bomb, Eraser, Trash2, Repeat } from 'lucide-react';
+import { RefreshCw, MousePointer2, Timer, Crown, Flag, Bomb, Eraser, Trash2, Repeat, ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeType } from '../types';
 
+// =======================
+// HELPER: Mobile Controls
+// =======================
+const MobileControls: React.FC<{onMove: (dir: 'up'|'down'|'left'|'right') => void, theme?: string}> = ({onMove, theme}) => {
+    const isSakura = theme === 'sakura';
+    const btnClass = `p-4 rounded-2xl active:scale-90 transition-transform shadow-lg flex items-center justify-center ${isSakura ? 'bg-pink-500 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`;
+    
+    // Prevent default scroll on touch
+    const preventScroll = (e: React.TouchEvent) => e.preventDefault();
+
+    return (
+        <div className="grid grid-cols-3 gap-2 mt-6 w-full max-w-[200px] select-none touch-none">
+            <div />
+            <button 
+                className={btnClass} 
+                onTouchStart={(e) => { preventScroll(e); onMove('up'); }} 
+                onClick={() => onMove('up')}
+            >
+                <ArrowUp size={24}/>
+            </button>
+            <div />
+            
+            <button 
+                className={btnClass} 
+                onTouchStart={(e) => { preventScroll(e); onMove('left'); }} 
+                onClick={() => onMove('left')}
+            >
+                <ArrowLeft size={24}/>
+            </button>
+            <button 
+                className={btnClass} 
+                onTouchStart={(e) => { preventScroll(e); onMove('down'); }} 
+                onClick={() => onMove('down')}
+            >
+                <ArrowDown size={24}/>
+            </button>
+            <button 
+                className={btnClass} 
+                onTouchStart={(e) => { preventScroll(e); onMove('right'); }} 
+                onClick={() => onMove('right')}
+            >
+                <ArrowRight size={24}/>
+            </button>
+        </div>
+    );
+};
+
 /* ==========================================
-   GAME: 2048 (Improved Animation)
+   GAME: 2048 (Improved Animation + Mobile)
    ========================================== */
 type Tile = {
   id: number;
@@ -257,6 +304,9 @@ export const Game2048: React.FC<{theme?: ThemeType, gameId: string, onSaveScore:
             </div>
         )}
       </div>
+      
+      {/* MOBILE CONTROLS */}
+      <MobileControls onMove={move} theme={theme} />
     </div>
   );
 };
@@ -300,6 +350,14 @@ export const SnakeGame: React.FC<{theme?: ThemeType, gameId: string, onSaveScore
         setIsPaused(false);
         spawnFood();
     };
+
+    const handleInput = useCallback((dir: 'up'|'down'|'left'|'right') => {
+        const cur = directionRef.current;
+        if (dir === 'up' && cur.y !== 1) { directionRef.current = {x:0, y:-1}; setIsPaused(false); }
+        if (dir === 'down' && cur.y !== -1) { directionRef.current = {x:0, y:1}; setIsPaused(false); }
+        if (dir === 'left' && cur.x !== 1) { directionRef.current = {x:-1, y:0}; setIsPaused(false); }
+        if (dir === 'right' && cur.x !== -1) { directionRef.current = {x:1, y:0}; setIsPaused(false); }
+    }, []);
 
     const moveSnake = useCallback(() => {
         if (gameOver || isPaused) return;
@@ -349,16 +407,14 @@ export const SnakeGame: React.FC<{theme?: ThemeType, gameId: string, onSaveScore
             if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','KeyW','KeyS','KeyA','KeyD'].includes(code)) {
                 e.preventDefault();
             }
-
-            const cur = directionRef.current;
-            if (code === 'ArrowUp' || code === 'KeyW') { if(cur.y !== 1) directionRef.current = {x:0, y:-1}; setIsPaused(false); }
-            if (code === 'ArrowDown' || code === 'KeyS') { if(cur.y !== -1) directionRef.current = {x:0, y:1}; setIsPaused(false); }
-            if (code === 'ArrowLeft' || code === 'KeyA') { if(cur.x !== 1) directionRef.current = {x:-1, y:0}; setIsPaused(false); }
-            if (code === 'ArrowRight' || code === 'KeyD') { if(cur.x !== -1) directionRef.current = {x:1, y:0}; setIsPaused(false); }
+            if (code === 'ArrowUp' || code === 'KeyW') handleInput('up');
+            if (code === 'ArrowDown' || code === 'KeyS') handleInput('down');
+            if (code === 'ArrowLeft' || code === 'KeyA') handleInput('left');
+            if (code === 'ArrowRight' || code === 'KeyD') handleInput('right');
         };
         window.addEventListener('keydown', handleKey);
         return () => window.removeEventListener('keydown', handleKey);
-    }, []);
+    }, [handleInput]);
 
     const getHeadRotation = () => {
         const d = directionRef.current;
@@ -453,6 +509,8 @@ export const SnakeGame: React.FC<{theme?: ThemeType, gameId: string, onSaveScore
                     </div>
                 )}
             </div>
+            {/* MOBILE CONTROLS */}
+            <MobileControls onMove={handleInput} theme={theme} />
         </div>
     );
 };
@@ -1274,7 +1332,7 @@ export const PaintGame: React.FC = () => {
 /* ==========================================
    GAME: Tetris (Full Logic Restored)
    ========================================== */
-export const TetrisGame: React.FC<{gameId: string, onSaveScore: (gameId: string, score: number) => void}> = ({gameId, onSaveScore}) => {
+export const TetrisGame: React.FC<{gameId: string, onSaveScore: (gameId: string, score: number) => void, theme?: string}> = ({gameId, onSaveScore, theme}) => {
     const COLS = 10;
     const ROWS = 20;
     const BLOCK_SIZE = 30;
@@ -1473,6 +1531,23 @@ export const TetrisGame: React.FC<{gameId: string, onSaveScore: (gameId: string,
         reqRef.current = requestAnimationFrame(loop);
     };
 
+    const handleInput = useCallback((dir: 'up'|'down'|'left'|'right') => {
+        if (dir === 'left') {
+            if (!checkCollision(-1, 0, gameState.current.piece.shape)) gameState.current.piece.x--;
+        }
+        if (dir === 'right') {
+            if (!checkCollision(1, 0, gameState.current.piece.shape)) gameState.current.piece.x++;
+        }
+        if (dir === 'up') {
+            rotate();
+        }
+        if (dir === 'down') {
+            // Soft drop one step
+            gameState.current.isSoftDrop = true;
+            setTimeout(() => gameState.current.isSoftDrop = false, 100);
+        }
+    }, []);
+
     useEffect(() => {
         startGame();
 
@@ -1487,15 +1562,9 @@ export const TetrisGame: React.FC<{gameId: string, onSaveScore: (gameId: string,
                 return;
             }
 
-            if (code === 'ArrowLeft' || code === 'KeyA') {
-                if (!checkCollision(-1, 0, gameState.current.piece.shape)) gameState.current.piece.x--;
-            }
-            if (code === 'ArrowRight' || code === 'KeyD') {
-                if (!checkCollision(1, 0, gameState.current.piece.shape)) gameState.current.piece.x++;
-            }
-            if (code === 'ArrowUp' || code === 'KeyW') {
-                rotate();
-            }
+            if (code === 'ArrowLeft' || code === 'KeyA') handleInput('left');
+            if (code === 'ArrowRight' || code === 'KeyD') handleInput('right');
+            if (code === 'ArrowUp' || code === 'KeyW') handleInput('up');
             if (code === 'ArrowDown' || code === 'KeyS') {
                 gameState.current.isSoftDrop = true;
             }
@@ -1516,15 +1585,19 @@ export const TetrisGame: React.FC<{gameId: string, onSaveScore: (gameId: string,
             cancelAnimationFrame(reqRef.current);
             gameState.current.isRunning = false;
         };
-    }, []);
+    }, [handleInput]);
 
     return (
-        <canvas 
-            ref={canvasRef} 
-            width={COLS * BLOCK_SIZE} 
-            height={ROWS * BLOCK_SIZE} 
-            className="rounded-lg shadow-2xl border border-white/10 w-full h-auto max-w-[300px] touch-none"
-        />
+        <div className="flex flex-col items-center">
+            <canvas 
+                ref={canvasRef} 
+                width={COLS * BLOCK_SIZE} 
+                height={ROWS * BLOCK_SIZE} 
+                className="rounded-lg shadow-2xl border border-white/10 w-full h-auto max-w-[300px] touch-none"
+            />
+            {/* MOBILE CONTROLS */}
+            <MobileControls onMove={handleInput} theme={theme} />
+        </div>
     );
 };
 
