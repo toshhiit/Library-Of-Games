@@ -26,7 +26,7 @@ const Drawer: React.FC<DrawerProps> = ({ isOpen, onClose, position, title, child
             className="fixed inset-0 bg-black/50 z-[60] backdrop-blur-sm"
           />
           
-          {/* Panel (Сама панель) */}
+          {/* Panel (Выдвижная панель) */}
           <motion.div
             initial={{ x: isLeft ? '-100%' : '100%' }}
             animate={{ x: 0 }}
