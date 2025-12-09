@@ -35,11 +35,11 @@ if not DATABASE_URL:
 
 # ==================== BOT KEYBOARDS & CONSTS ====================
 # Пользовательская клавиатура (менюшка снизу)
-# ИСПРАВЛЕНИЕ: Сначала создаем клавиатуру, затем добавляем кнопки.
-# Нельзя передавать список кнопок в конструктор ReplyKeyboardMarkup!
 REPLY_KEYBOARD = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
 REPLY_KEYBOARD.add(types.KeyboardButton("🎮 Играть"))
-REPLY_KEYBOARD.row(types.KeyboardButton("🏆 Моя Статистика"), types.KeyboardButton("❓ Помощь"))
+# Добавили кнопку Профиль в ряд с статистикой
+REPLY_KEYBOARD.row(types.KeyboardButton("👤 Профиль"), types.KeyboardButton("🏆 Моя Статистика"))
+REPLY_KEYBOARD.add(types.KeyboardButton("❓ Помощь"))
 
 # ID игр (из constants.ts)
 GAME_NAMES = {
@@ -126,6 +126,7 @@ def start_cmd(message):
                     (tg_id, username)
                 )
                 new_user_id = cursor.fetchone()[0]
+                # Создаем начальную статистику
                 cursor.execute(
                     "INSERT INTO stats (user_id, xp, coins, level) VALUES (%s, 0, 1000, 1)",
                     (new_user_id,)
@@ -145,14 +146,57 @@ def start_cmd(message):
 def games_cmd_or_button(message):
     handle_games_request(message)
 
+# Обработчик кнопки "👤 Профиль" (НОВОЕ)
+@bot.message_handler(commands=['profile'])
+@bot.message_handler(func=lambda message: message.text == "👤 Профиль")
+def profile_cmd(message):
+    tg_id = message.from_user.id
+    
+    try:
+        conn = get_db_connection()
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            # Получаем данные пользователя и его статистику
+            cursor.execute("""
+                SELECT u.username, s.coins, s.xp, s.level 
+                FROM users u
+                LEFT JOIN stats s ON u.id = s.user_id
+                WHERE u.tg_id = %s
+            """, (tg_id,))
+            
+            user_data = cursor.fetchone()
+            
+            if user_data:
+                # Если stats еще не создана (для старых юзеров), ставим дефолтные значения
+                coins = user_data['coins'] if user_data['coins'] is not None else 0
+                xp = user_data['xp'] if user_data['xp'] is not None else 0
+                level = user_data['level'] if user_data['level'] is not None else 1
+                
+                text = (
+                    f"👤 *Твой Профиль*\n\n"
+                    f"🆔 *Имя*: {user_data['username']}\n"
+                    f"📊 *Уровень*: {level}\n"
+                    f"⭐ *Опыт (XP)*: {xp}\n"
+                    f"💰 *Монеты*: {coins}\n\n"
+                    f"💡 _Играй в игры, чтобы заработать больше!_"
+                )
+                bot.send_message(message.chat.id, text, parse_mode='Markdown', reply_markup=REPLY_KEYBOARD)
+            else:
+                bot.send_message(message.chat.id, "Профиль не найден. Нажми /start", reply_markup=REPLY_KEYBOARD)
+                
+        conn.close()
+    except Exception as e:
+        print(f"Error in profile_cmd: {e}")
+        bot.send_message(message.chat.id, "Ошибка при получении профиля.", reply_markup=REPLY_KEYBOARD)
+
+
 # Обработчик кнопки "❓ Помощь"
 @bot.message_handler(func=lambda message: message.text == "❓ Помощь")
 def help_cmd(message):
     text = (
         "🤖 *Как использовать бота:*\n\n"
-        "1. Нажми кнопку *🎮 Играть* или введи `/games`.\n"
-        "2. Получи ссылку для входа в библиотеку игр.\n"
-        "3. Нажми кнопку *🏆 Моя Статистика* или введи `/stats`, чтобы посмотреть свои лучшие результаты.\n"
+        "1. Нажми *🎮 Играть*, чтобы получить ссылку на сайт.\n"
+        "2. Нажми *👤 Профиль*, чтобы узнать свой уровень и баланс.\n"
+        "3. Нажми *🏆 Моя Статистика*, чтобы увидеть рекорды в играх.\n"
         "4. Для перезапуска меню введи `/start`."
     )
     bot.send_message(message.chat.id, text, parse_mode='Markdown', reply_markup=REPLY_KEYBOARD)
