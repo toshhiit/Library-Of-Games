@@ -67,16 +67,9 @@ export const GAMES: Game[] = [
   }
 ];
 
-// Используем локальные пути, если они были загружены, или оставляем заглушки.
+// Оставляем только дефолтную, остальные берутся из Телеграма
 export const AVAILABLE_AVATARS: AvatarItem[] = [
-  { id: 'default', url: '/assets/images/avatars/default.png', price: 0 },
-  { id: 'robot', url: '/assets/images/avatars/robot.png', price: 1000 },
-  { id: 'ninja', url: 'https://picsum.photos/seed/ninja/200/200', price: 1000 },
-  { id: 'king', url: 'https://picsum.photos/seed/king/200/200', price: 1000 },
-  { id: 'alien', url: 'https://picsum.photos/seed/alien/200/200', price: 1000 },
-  { id: 'cat', url: 'https://picsum.photos/seed/cat/200/200', price: 1000 },
-  { id: 'dog', url: 'https://picsum.photos/seed/dog/200/200', price: 1000 },
-  { id: 'skull', url: 'https://picsum.photos/seed/skull/200/200', price: 1000 },
+  { id: 'default', url: '/assets/images/avatars/default.png', price: 0 }
 ];
 
 export const SHOP_ITEMS: ShopItem[] = [
