@@ -10,7 +10,8 @@ import {
   CheckCircle2, 
   Send,
   Settings,
-  ShoppingBag
+  ShoppingBag,
+  Trophy // <-- Добавили иконку
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { GAMES, AVAILABLE_AVATARS } from './constants';
@@ -33,6 +34,7 @@ const App: React.FC = () => {
     activeTheme: 'default',
     activeBoosts: [],
     hasChangedName: false,
+    achievements: [], // <-- ИСПРАВЛЕНИЕ: Добавили инициализацию массива ачивок
   });
   
   const [coins, setCoins] = useState(10000); 
@@ -41,6 +43,7 @@ const App: React.FC = () => {
   // App State
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [achievementNotification, setAchievementNotification] = useState<{name: string, desc: string} | null>(null); // Уведомление
   
   // Drawer View Modes
   const [isSettingsMode, setIsSettingsMode] = useState(false); 
@@ -65,6 +68,7 @@ const App: React.FC = () => {
               tgId: data.tg_id,
               tgUsername: data.username ? `@${data.username}` : 'Player',
               displayName: data.username || 'Player',
+              achievements: data.achievements || [], // Загружаем ачивки с сервера
             }));
             if (data.coins !== undefined) setCoins(data.coins);
           }
@@ -72,13 +76,12 @@ const App: React.FC = () => {
         .catch(err => console.error("API Auth Error:", err));
     }
 
-    // 2. Standard Telegram WebApp Init (Visuals & Fallback)
+    // 2. Standard Telegram WebApp Init
     const tg = window.Telegram?.WebApp;
     if (tg) {
         tg.ready();
-        tg.expand(); // Open full height
+        tg.expand();
         
-        // Define theme colors for Telegram header to match app
         try {
            tg.headerColor = '#212233';
            tg.backgroundColor = '#0C0D14';
@@ -89,16 +92,13 @@ const App: React.FC = () => {
         const tgUser = tg.initDataUnsafe?.user;
 
         if (tgUser) {
-            // Обновляем данные пользователя из Telegram
-            // БЕРЕМ ФОТО (photo_url) ПРЯМО ИЗ ТЕЛЕГРАМА
             setUser(prev => ({
                 ...prev,
                 tgId: tgUser.id,
                 tgUsername: tgUser.username ? `@${tgUser.username}` : 'No Username',
-                avatar: tgUser.photo_url || prev.avatar, // <-- ВОТ ГЛАВНОЕ ИЗМЕНЕНИЕ
+                avatar: tgUser.photo_url || prev.avatar, 
             }));
 
-            // Если сессии нет, обновляем и имя
             if (!sessionId) {
                 setUser(prev => ({
                     ...prev,
@@ -109,7 +109,6 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Derived State
   const filteredGames = GAMES.filter(game => {
     const matchesSearch = game.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = filter === 'all' 
@@ -118,7 +117,7 @@ const App: React.FC = () => {
         ? game.category === 'single' 
         : filter === 'multi'
             ? game.category === 'multi'
-            : favorites.has(game.id); // 'favorites' filter
+            : favorites.has(game.id);
     return matchesSearch && matchesFilter;
   });
 
@@ -188,7 +187,6 @@ const App: React.FC = () => {
   const handleSaveScore = async (gameId: string, score: number) => {
     const sessionId = localStorage.getItem('session_id');
     if (!sessionId || !user.tgId) {
-        console.warn("Cannot save score: User is not authorized or session is missing.");
         return;
     }
 
@@ -202,15 +200,26 @@ const App: React.FC = () => {
         const data = await res.json();
         
         if (data.success) {
-            console.log(`Score for ${gameId} saved successfully: ${score}`);
-            if(window.Telegram?.WebApp?.HapticFeedback) {
+            // ПРОВЕРКА НОВЫХ АЧИВОК
+            if (data.new_achievements && data.new_achievements.length > 0) {
+                const newAch = data.new_achievements[0];
+                
+                // Добавляем в стейт юзера
+                setUser(prev => ({
+                    ...prev,
+                    achievements: [...(prev.achievements || []), newAch.id]
+                }));
+
+                // Показываем уведомление
+                setAchievementNotification({ name: newAch.name, desc: newAch.desc });
+                setTimeout(() => setAchievementNotification(null), 4000);
+                
+                if(window.Telegram?.WebApp?.HapticFeedback) {
+                    window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+                }
+            } else if(window.Telegram?.WebApp?.HapticFeedback) {
                 window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
             }
-        } else {
-             console.error("Failed to save score:", data.error);
-             if(window.Telegram?.WebApp?.HapticFeedback) {
-                 window.Telegram.WebApp.HapticFeedback.notificationOccurred('error');
-             }
         }
     } catch (err) {
         console.error("API Save Score Network Error:", err);
@@ -237,10 +246,10 @@ const App: React.FC = () => {
       {isSakura && (
           <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
               <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1522383225653-ed111181a951?q=80&w=2076&auto=format&fit=crop')] bg-cover bg-center opacity-20 mix-blend-screen"></div>
+              {/* Sakura Particles */}
               <div className="absolute top-[-10%] left-[10%] w-4 h-4 bg-pink-300 rounded-full blur-[1px] animate-[bounce_5s_infinite] opacity-60"></div>
               <div className="absolute top-[-5%] left-[30%] w-3 h-3 bg-pink-400 rounded-full blur-[1px] animate-[bounce_7s_infinite_1s] opacity-60"></div>
               <div className="absolute top-[-15%] left-[60%] w-5 h-5 bg-pink-200 rounded-full blur-[1px] animate-[bounce_6s_infinite_0.5s] opacity-50"></div>
-              <div className="absolute top-[-10%] left-[80%] w-3 h-3 bg-white rounded-full blur-[1px] animate-[bounce_8s_infinite_2s] opacity-60"></div>
           </div>
       )}
 
@@ -529,6 +538,33 @@ const App: React.FC = () => {
           </div>
         )}
       </Drawer>
+
+      {/* ACHIEVEMENT NOTIFICATION */}
+      <AnimatePresence>
+        {achievementNotification && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50, scale: 0.8 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.8 }}
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-[320px]"
+          >
+            <div className="bg-gradient-to-r from-yellow-600 to-yellow-500 p-[2px] rounded-2xl shadow-2xl">
+              <div className="bg-[#1a1b26] rounded-[14px] p-4 flex items-center gap-4 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-20 h-20 bg-yellow-500/20 blur-2xl rounded-full"></div>
+                
+                <div className="w-12 h-12 bg-yellow-500/20 rounded-full flex items-center justify-center shrink-0">
+                  <Trophy className="text-yellow-400" size={24} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-yellow-400 text-sm uppercase tracking-wider">Достижение!</h4>
+                  <div className="font-bold text-white leading-tight">{achievementNotification.name}</div>
+                  <div className="text-xs text-white/60 mt-0.5">{achievementNotification.desc}</div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
