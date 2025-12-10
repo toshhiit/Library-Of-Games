@@ -35,7 +35,8 @@ const App: React.FC = () => {
     hasChangedName: false,
   });
   
-  const [coins, setCoins] = useState(10000); 
+  // ИЗМЕНЕНО: Начальное значение 1000 для новых пользователей
+  const [coins, setCoins] = useState(1000); 
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
   // App State
@@ -51,9 +52,8 @@ const App: React.FC = () => {
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
 
-  // --- TELEGRAM & BACKEND AUTH INITIALIZATION ---
+  // --- AUTH INITIALIZATION ---
   useEffect(() => {
-    // 1. Check for Backend Session (Auth Flow)
     const sessionId = localStorage.getItem('session_id');
     if (sessionId) {
       fetch(`/api/user?session=${sessionId}`)
@@ -66,30 +66,25 @@ const App: React.FC = () => {
               tgUsername: data.username ? `@${data.username}` : 'Player',
               displayName: data.username || 'Player',
             }));
+            // Если с сервера пришел 0 или другое число, ставим его. 
+            // Если undefined (ошибка), останется 1000.
             if (data.coins !== undefined) setCoins(data.coins);
           }
         })
         .catch(err => console.error("API Auth Error:", err));
     }
 
-    // 2. Standard Telegram WebApp Init (Visuals & Fallback)
     const tg = window.Telegram?.WebApp;
     if (tg) {
         tg.ready();
-        tg.expand(); // Open full height
-        
-        // Define theme colors for Telegram header to match app
+        tg.expand();
         try {
            tg.headerColor = '#212233';
            tg.backgroundColor = '#0C0D14';
         } catch (e) {
             console.error("Error setting TG colors", e);
         }
-
         const tgUser = tg.initDataUnsafe?.user;
-
-        // Only use WebApp data if we didn't get data from our Backend API already
-        // Or simple visual updates
         if (tgUser && !sessionId) {
             setUser(prev => ({
                 ...prev,
@@ -101,7 +96,6 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Derived State
   const filteredGames = GAMES.filter(game => {
     const matchesSearch = game.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = filter === 'all' 
@@ -110,16 +104,14 @@ const App: React.FC = () => {
         ? game.category === 'single' 
         : filter === 'multi'
             ? game.category === 'multi'
-            : favorites.has(game.id); // 'favorites' filter
+            : favorites.has(game.id);
     return matchesSearch && matchesFilter;
   });
 
   const isSakura = user.activeTheme === 'sakura';
 
-  // Handlers
   const handleAddCoins = (amount: number) => {
       setCoins(prev => prev + amount);
-      // Haptic feedback if in Telegram
       if(window.Telegram?.WebApp?.HapticFeedback) {
           window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
       }
@@ -128,7 +120,6 @@ const App: React.FC = () => {
   const handleSpendCoins = (amount: number): boolean => {
     if (coins >= amount) {
       setCoins(prev => prev - amount);
-      // Haptic feedback if in Telegram
       if(window.Telegram?.WebApp?.HapticFeedback) {
           window.Telegram.WebApp.HapticFeedback.selectionChanged();
       }
@@ -146,7 +137,7 @@ const App: React.FC = () => {
 
   const handleFilterChange = (newFilter: FilterType) => {
     setFilter(newFilter);
-    setIsMenuOpen(false); // Auto close menu on selection (optional)
+    setIsMenuOpen(false);
   };
 
   const handleGameSelect = (game: Game) => {
@@ -179,41 +170,24 @@ const App: React.FC = () => {
     }
   };
   
-  // --- НОВЫЙ ХЕНДЛЕР: Сохранение счета ---
   const handleSaveScore = async (gameId: string, score: number) => {
     const sessionId = localStorage.getItem('session_id');
-    if (!sessionId || !user.tgId) {
-        console.warn("Cannot save score: User is not authorized or session is missing.");
-        return;
-    }
+    if (!sessionId || !user.tgId) return;
 
     try {
-        const res = await fetch("/api/game/score", {
+        await fetch("/api/game/score", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ session: sessionId, game_id: gameId, score: score })
         });
-        
-        const data = await res.json();
-        
-        if (data.success) {
-            console.log(`Score for ${gameId} saved successfully: ${score}`);
-            if(window.Telegram?.WebApp?.HapticFeedback) {
-                window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
-            }
-        } else {
-             console.error("Failed to save score:", data.error);
-             if(window.Telegram?.WebApp?.HapticFeedback) {
-                 window.Telegram.WebApp.HapticFeedback.notificationOccurred('error');
-             }
+        if(window.Telegram?.WebApp?.HapticFeedback) {
+            window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
         }
     } catch (err) {
-        console.error("API Save Score Network Error:", err);
+        console.error("API Save Score Error:", err);
     }
   };
-  // ------------------------------------------
 
-  // Reset settings/shop mode when closing drawers
   useEffect(() => {
     if (!isProfileOpen) setTimeout(() => setIsSettingsMode(false), 300);
   }, [isProfileOpen]);
@@ -222,7 +196,6 @@ const App: React.FC = () => {
     if (!isMenuOpen) setTimeout(() => setIsShopMode(false), 300);
   }, [isMenuOpen]);
 
-  // Close search results when clicking outside
   useEffect(() => {
     const handleClickOutside = () => setShowSearchResults(false);
     window.addEventListener('click', handleClickOutside);
@@ -232,23 +205,15 @@ const App: React.FC = () => {
   return (
     <div className={`min-h-screen flex flex-col relative font-sans text-textMain selection:bg-yellow-500/30 transition-colors duration-500 ${isSakura ? 'bg-pink-950' : 'bg-main'}`}>
       
-      {/* SAKURA BACKGROUND EFFECTS */}
       {isSakura && (
           <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
               <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1522383225653-ed111181a951?q=80&w=2076&auto=format&fit=crop')] bg-cover bg-center opacity-20 mix-blend-screen"></div>
-              {/* Floating Petals Simulation */}
-              <div className="absolute top-[-10%] left-[10%] w-4 h-4 bg-pink-300 rounded-full blur-[1px] animate-[bounce_5s_infinite] opacity-60"></div>
-              <div className="absolute top-[-5%] left-[30%] w-3 h-3 bg-pink-400 rounded-full blur-[1px] animate-[bounce_7s_infinite_1s] opacity-60"></div>
-              <div className="absolute top-[-15%] left-[60%] w-5 h-5 bg-pink-200 rounded-full blur-[1px] animate-[bounce_6s_infinite_0.5s] opacity-50"></div>
-              <div className="absolute top-[-10%] left-[80%] w-3 h-3 bg-white rounded-full blur-[1px] animate-[bounce_8s_infinite_2s] opacity-60"></div>
           </div>
       )}
 
-      {/* HEADER */}
       <header className={`sticky top-0 z-50 px-6 py-3 flex items-center shadow-header transition-all duration-300 ${isSakura ? 'bg-pink-900/80 backdrop-blur-md' : 'bg-header'}`}>
         <div className="w-full max-w-[1360px] mx-auto flex items-center justify-between gap-4">
           
-          {/* Left: Menu & Logo */}
           <div className="flex items-center gap-3 shrink-0 mr-5">
             <button 
               onClick={() => setIsMenuOpen(true)}
@@ -270,7 +235,6 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Center: Search */}
           <div 
             className="flex-1 max-w-[520px] relative mx-auto"
             onClick={(e) => e.stopPropagation()}
@@ -290,7 +254,6 @@ const App: React.FC = () => {
               <Search className={`absolute right-3.5 pointer-events-none ${isSakura ? 'text-pink-300' : 'text-textMuted'}`} size={18} />
             </div>
 
-            {/* Dropdown Results */}
             <AnimatePresence>
               {showSearchResults && searchQuery && (
                 <motion.div
@@ -318,10 +281,9 @@ const App: React.FC = () => {
             </AnimatePresence>
           </div>
 
-          {/* Right: Coins, Fav, Profile */}
           <div className="flex items-center gap-2 shrink-0 ml-5">
-            {/* Coins Panel */}
-            <div className={`hidden sm:flex px-3 py-1.5 rounded-full items-center gap-2 shadow-lg min-w-[110px] ${isSakura ? 'bg-pink-800' : 'bg-panel'}`}>
+            {/* ИЗМЕНЕНО: убрал 'hidden sm:flex', теперь 'flex' */}
+            <div className={`flex px-3 py-1.5 rounded-full items-center gap-2 shadow-lg min-w-[110px] ${isSakura ? 'bg-pink-800' : 'bg-panel'}`}>
               <div className="w-6 h-6 rounded-full bg-yellow-400 border-2 border-yellow-600 flex items-center justify-center text-[10px] font-bold text-yellow-900">
                 $
               </div>
@@ -334,7 +296,6 @@ const App: React.FC = () => {
               </button>
             </div>
 
-            {/* Profile Button */}
             <button 
               onClick={() => setIsProfileOpen(true)}
               className={`w-[38px] h-[38px] rounded-full p-0 overflow-hidden border-2 border-transparent hover:border-yellow-400 transition-all shadow-lg ${isSakura ? 'bg-pink-800' : 'bg-panel'}`}
@@ -345,7 +306,6 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* MAIN CONTENT */}
       <main className="flex-1 w-full max-w-[1360px] mx-auto pt-7 pb-10 px-6 flex flex-col relative z-10">
         {selectedGame ? (
            <GamePage 
@@ -353,7 +313,7 @@ const App: React.FC = () => {
               theme={user.activeTheme}
               onBack={handleBackToGrid} 
               onEarnCoins={handleAddCoins}
-              onSpendCoins={handleSpendCoins} /* ПЕРЕДАЕМ ФУНКЦИЮ ТРАТЫ */
+              onSpendCoins={handleSpendCoins}
               onSaveScore={handleSaveScore}
             />
         ) : (
@@ -391,7 +351,6 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* LEFT DRAWER: MENU & FILTERS & SHOP */}
       <Drawer 
         isOpen={isMenuOpen} 
         onClose={() => setIsMenuOpen(false)} 
@@ -457,17 +416,10 @@ const App: React.FC = () => {
                   Магазин
                </button>
             </div>
-            
-            <div className="pt-6 border-t border-white/5">
-               <p className="text-xs text-textMuted leading-relaxed">
-                 Выберите категорию, чтобы найти идеальную игру для вашей компании или соло-прохождения.
-               </p>
-            </div>
           </div>
         )}
       </Drawer>
 
-      {/* RIGHT DRAWER: PROFILE */}
       <Drawer 
         isOpen={isProfileOpen} 
         onClose={() => setIsProfileOpen(false)} 
@@ -484,7 +436,6 @@ const App: React.FC = () => {
           />
         ) : (
           <div className="flex flex-col h-full animate-in slide-in-from-right duration-300">
-            {/* User Info */}
             <div className="flex flex-col items-center mb-8">
               <div className="w-24 h-24 rounded-full p-1 border-2 border-yellow-400/50 mb-4 shadow-glow relative">
                 <img src={user.avatar} alt="User" className="w-full h-full rounded-full object-cover" />
@@ -494,7 +445,6 @@ const App: React.FC = () => {
               {user.tgId && <p className="text-xs text-textMuted/50 mt-1">ID: {user.tgId}</p>}
             </div>
 
-            {/* Stats */}
             <div className="grid grid-cols-2 gap-3 mb-8">
                <div className="bg-white/5 rounded-xl p-3 flex flex-col items-center">
                   <span className="text-2xl font-bold text-yellow-400">{coins}</span>
@@ -523,7 +473,6 @@ const App: React.FC = () => {
                </button>
             </div>
 
-            {/* Telegram Auth Badge (Sticky Bottom) */}
             <div className="mt-auto pt-6">
               <div className={`bg-[#2AABEE]/10 border border-[#2AABEE]/30 rounded-2xl p-4 flex items-center gap-4 transition-opacity ${user.tgId ? 'opacity-100' : 'opacity-50'}`}>
                  <div className="w-10 h-10 rounded-full bg-[#2AABEE] flex items-center justify-center shrink-0 shadow-lg shadow-blue-500/20">
@@ -535,9 +484,7 @@ const App: React.FC = () => {
                    </div>
                    <div className="text-sm font-medium">через Telegram</div>
                  </div>
-                 {user.tgId && <div className="ml-auto w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"></div>}
               </div>
-              <p className="text-center text-[10px] text-textMuted mt-3 opacity-60">LibraryOfGames v1.3.0</p>
             </div>
           </div>
         )}
