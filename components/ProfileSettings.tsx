@@ -1,8 +1,6 @@
-
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
-import { AVAILABLE_AVATARS } from '../constants';
-import { Save, Lock, Check, AlertCircle, Coins, ArrowLeft } from 'lucide-react';
+import { Save, Check, AlertCircle, Coins, ArrowLeft } from 'lucide-react';
 
 interface ProfileSettingsProps {
   user: UserProfile;
@@ -14,7 +12,6 @@ interface ProfileSettingsProps {
 
 const ProfileSettings: React.FC<ProfileSettingsProps> = ({ 
   user, 
-  coins, 
   onUpdateUser, 
   onSpendCoins, 
   onBack 
@@ -44,27 +41,6 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
         setSuccessMsg('Имя успешно изменено (-5000 монет)');
       } else {
         setError('Недостаточно монет. Стоимость: 5000');
-      }
-    }
-  };
-
-  const handleAvatarSelect = (avatarId: string, url: string, price: number) => {
-    setError(null);
-    setSuccessMsg(null);
-
-    if (user.unlockedAvatars.includes(avatarId)) {
-      // Already unlocked, just switch
-      onUpdateUser({ avatar: url });
-    } else {
-      // Need to buy
-      if (onSpendCoins(price)) {
-        onUpdateUser({ 
-          avatar: url, 
-          unlockedAvatars: [...user.unlockedAvatars, avatarId] 
-        });
-        setSuccessMsg(`Аватар куплен (-${price} монет)`);
-      } else {
-        setError(`Недостаточно монет. Стоимость: ${price}`);
       }
     }
   };
@@ -120,46 +96,15 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
           </div>
         </div>
 
-        {/* Avatar Selection */}
+        {/* Avatar Display (Selection removed) */}
         <div className="space-y-3">
            <label className="text-xs text-textMuted font-bold uppercase">Аватар</label>
-           <div className="grid grid-cols-3 gap-3">
-              {AVAILABLE_AVATARS.map((av) => {
-                const isUnlocked = user.unlockedAvatars.includes(av.id);
-                const isSelected = user.avatar === av.url;
-
-                return (
-                  <button
-                    key={av.id}
-                    onClick={() => handleAvatarSelect(av.id, av.url, av.price)}
-                    className={`
-                      relative aspect-square rounded-xl overflow-hidden border-2 transition-all
-                      ${isSelected ? 'border-yellow-400 ring-2 ring-yellow-400/30' : 'border-transparent hover:border-white/20'}
-                    `}
-                  >
-                    <img src={av.url} alt="avatar" className={`w-full h-full object-cover ${!isUnlocked ? 'grayscale opacity-50' : ''}`} />
-                    
-                    {/* Status Icons */}
-                    {isSelected && (
-                      <div className="absolute inset-0 bg-yellow-400/20 flex items-center justify-center">
-                         <div className="bg-yellow-400 text-black rounded-full p-1">
-                           <Check size={16} strokeWidth={3} />
-                         </div>
-                      </div>
-                    )}
-
-                    {!isUnlocked && (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 p-1">
-                        <Lock size={16} className="text-textMuted mb-1" />
-                        <div className="flex items-center gap-0.5 text-[10px] font-bold text-yellow-400 bg-black/50 px-1.5 py-0.5 rounded-full">
-                           <Coins size={10} />
-                           {av.price}
-                        </div>
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
+           <div className="p-4 bg-white/5 rounded-xl flex items-center gap-4 border border-white/5">
+              <img src={user.avatar} alt="Current Avatar" className="w-16 h-16 rounded-full object-cover border-2 border-yellow-400/50" />
+              <div className="flex flex-col">
+                  <span className="font-bold text-sm">Фото профиля</span>
+                  <span className="text-xs text-textMuted">Используется ваше фото из Telegram.</span>
+              </div>
            </div>
         </div>
 
