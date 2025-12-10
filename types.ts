@@ -1,3 +1,9 @@
+export interface Achievement {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+}
 
 export interface Game {
   id: string;
@@ -30,15 +36,16 @@ export interface ShopItem {
 }
 
 export interface UserProfile {
-  tgId?: number; // Added Telegram ID
+  tgId?: number;
   tgUsername: string;
   displayName: string;
   avatar: string;
-  unlockedAvatars: string[]; // IDs of unlocked avatars
-  inventory: string[]; // IDs of bought shop items (themes, etc)
+  unlockedAvatars: string[]; 
+  inventory: string[]; 
   activeTheme: ThemeType;
-  activeBoosts: string[]; // IDs of active boosts
+  activeBoosts: string[];
   hasChangedName: boolean;
+  achievements: string[]; // <--- ДОБАВЛЕНО ПОЛЕ ДЛЯ АЧИВОК
 }
 
 // Telegram Web App Types
