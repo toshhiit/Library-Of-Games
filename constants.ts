@@ -67,9 +67,9 @@ export const GAMES: Game[] = [
   }
 ];
 
-// Оставляем только дефолтную, остальные берутся из Телеграма
+// ИСПРАВЛЕН ПУТЬ: удалено /avatars/
 export const AVAILABLE_AVATARS: AvatarItem[] = [
-  { id: 'default', url: '/assets/images/avatars/default.png', price: 0 }
+  { id: 'default', url: '/assets/images/default.png', price: 0 }
 ];
 
 export const SHOP_ITEMS: ShopItem[] = [
@@ -100,4 +100,14 @@ export const SHOP_ITEMS: ShopItem[] = [
     value: 'sakura',
     image: 'https://picsum.photos/seed/sakuratheme/200/200'
   }
+];
+
+// Achievements List for Frontend
+import { Achievement } from './types';
+export const ACHIEVEMENTS_LIST: Achievement[] = [
+  { id: '2048_novice', name: 'Новичок 2048', description: 'Набрал 1000 очков в 2048', icon: '🧩' },
+  { id: '2048_pro', name: 'Профи 2048', description: 'Набрал 5000 очков в 2048', icon: '🧠' },
+  { id: 'snake_eater', name: 'Сытый удав', description: 'Съел 10 яблок в Змейке', icon: '🐍' },
+  { id: 'dino_runner', name: 'Марафонец', description: 'Пробежал 500м в Дино', icon: '🦖' },
+  { id: 'clicker_fast', name: 'Быстрые пальцы', description: '200 кликов за минуту', icon: '⚡' },
 ];
