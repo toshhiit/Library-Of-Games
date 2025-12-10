@@ -10,17 +10,16 @@ import os
 from urllib.parse import urlparse
 from datetime import datetime, timezone, timedelta
 
-# Загружаем переменные
+# Загружаем переменные окружения
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 SITE_URL = os.getenv("SITE_URL")
 DATABASE_URL = os.getenv("DATABASE_URL")
 PORT = int(os.environ.get("PORT", 8080))
 
-# ВАЖНО: Vite собирает проект в папку 'dist'. Указываем Flask искать файлы там.
+# Настройка путей для статики (Vite собирает в dist)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DIST_DIR = os.path.join(BASE_DIR, 'dist')
 
-# Если папки dist не существует, используем текущую
 if not os.path.exists(DIST_DIR):
     SITE_DIR = BASE_DIR
 else:
@@ -29,28 +28,22 @@ else:
 print(f"Server is serving static files from: {SITE_DIR}")
 
 if not BOT_TOKEN:
-    print("BOT_TOKEN не найден! Бот не запустится.")
+    print("WARNING: BOT_TOKEN не найден! Бот не запустится.")
 if not DATABASE_URL:
-    raise ValueError("DATABASE_URL не найден!")
+    print("WARNING: DATABASE_URL не найден!")
 
 # ==================== CONFIGURATION ====================
 
-# Список достижений (правила)
+# Список достижений
 ACHIEVEMENTS_RULES = [
-    # Игра 2048 (id: 1)
     {"id": "2048_novice", "game_id": "1", "score": 1000, "name": "Новичок 2048", "desc": "Набрал 1000 очков в 2048"},
     {"id": "2048_pro", "game_id": "1", "score": 5000, "name": "Профи 2048", "desc": "Набрал 5000 очков в 2048"},
-    
-    # Змейка (id: 2)
     {"id": "snake_eater", "game_id": "2", "score": 10, "name": "Сытый удав", "desc": "Съел 10 яблок в Змейке"},
-    
-    # Дино (id: 3)
     {"id": "dino_runner", "game_id": "3", "score": 500, "name": "Марафонец", "desc": "Пробежал 500м в Дино"},
-    
-    # Кликер (id: 4)
     {"id": "clicker_fast", "game_id": "4", "score": 200, "name": "Быстрые пальцы", "desc": "200 кликов за минуту"},
 ]
 
+# Клавиатура бота
 REPLY_KEYBOARD = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
 REPLY_KEYBOARD.add(types.KeyboardButton("🎮 Играть"))
 REPLY_KEYBOARD.row(types.KeyboardButton("👤 Профиль"), types.KeyboardButton("🏆 Моя Статистика"))
@@ -63,19 +56,33 @@ GAME_NAMES = {
 
 # =============== DB HELPER ===============
 def get_db_connection():
-    url = urlparse(DATABASE_URL)
-    conn = psycopg2.connect(
-        dbname=url.path[1:],
-        user=url.username,
-        password=url.password,
-        host=url.hostname,
-        port=url.port,
-        sslmode='require'
-    )
-    return conn
+    if not DATABASE_URL:
+        return None
+    try:
+        url = urlparse(DATABASE_URL)
+        conn = psycopg2.connect(
+            dbname=url.path[1:],
+            user=url.username,
+            password=url.password,
+            host=url.hostname,
+            port=url.port,
+            sslmode='require'
+        )
+        return conn
+    except Exception as e:
+        print(f"DB Connection Error: {e}")
+        return None
 
 # =============== BOT HANDLERS ===================
 bot = telebot.TeleBot(BOT_TOKEN)
+
+# Функция запуска бота (КОТОРОЙ НЕ ХВАТАЛО)
+def run_bot():
+    print("Telegram Bot started polling...")
+    try:
+        bot.infinity_polling()
+    except Exception as e:
+        print(f"Bot polling error: {e}")
 
 def handle_games_request(message):
     tg_id = message.from_user.id
@@ -83,6 +90,10 @@ def handle_games_request(message):
     
     try:
         conn = get_db_connection()
+        if not conn:
+            bot.send_message(chat_id, "Ошибка подключения к базе данных.")
+            return
+
         with conn.cursor() as cursor:
             cursor.execute("SELECT id FROM users WHERE tg_id=%s", (tg_id,))
             row = cursor.fetchone()
@@ -93,6 +104,7 @@ def handle_games_request(message):
 
             user_id = row[0]
             token = str(uuid.uuid4())
+            # Время жизни токена 10 минут
             expires_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
             
             cursor.execute("""
@@ -107,11 +119,11 @@ def handle_games_request(message):
             btn = types.InlineKeyboardButton("Играть 🎮", url=link)
             markup.add(btn)
             
-            bot.send_message(chat_id, "Твоя ссылка для входа:", reply_markup=markup)
+            bot.send_message(chat_id, "Твоя ссылка для входа (действует 10 минут):", reply_markup=markup)
         conn.close()
     except Exception as e:
         print(f"Error in handle_games_request: {e}")
-        bot.send_message(chat_id, "Ошибка сервера или базы данных.", reply_markup=REPLY_KEYBOARD)
+        bot.send_message(chat_id, "Ошибка сервера.", reply_markup=REPLY_KEYBOARD)
 
 @bot.message_handler(commands=['start'])
 def start_cmd(message):
@@ -120,6 +132,8 @@ def start_cmd(message):
     
     try:
         conn = get_db_connection()
+        if not conn: return
+
         with conn.cursor() as cursor:
             cursor.execute("SELECT id FROM users WHERE tg_id=%s", (tg_id,))
             user = cursor.fetchone()
@@ -130,28 +144,25 @@ def start_cmd(message):
                     (tg_id, username)
                 )
                 new_user_id = cursor.fetchone()[0]
-                # Создаем статистику с 1000 монетами для новых пользователей
+                # Создаем статистику
                 cursor.execute(
                     "INSERT INTO stats (user_id, xp, coins, level) VALUES (%s, 0, 1000, 1)",
                     (new_user_id,)
                 )
                 conn.commit()
-                bot.send_message(message.chat.id, "Добро пожаловать! Аккаунт создан. Вам начислено 1000 монет 💰", reply_markup=REPLY_KEYBOARD)
+                bot.send_message(message.chat.id, "Добро пожаловать! Вам начислено 1000 монет 💰", reply_markup=REPLY_KEYBOARD)
             else:
+                # Проверяем, есть ли статы у старого юзера
                 user_id = user[0]
                 cursor.execute("SELECT id FROM stats WHERE user_id=%s", (user_id,))
                 if not cursor.fetchone():
-                     cursor.execute(
-                        "INSERT INTO stats (user_id, xp, coins, level) VALUES (%s, 0, 1000, 1)",
-                        (user_id,)
-                    )
+                     cursor.execute("INSERT INTO stats (user_id, xp, coins, level) VALUES (%s, 0, 1000, 1)", (user_id,))
                      conn.commit()
                 
                 bot.send_message(message.chat.id, "С возвращением! Выбери действие:", reply_markup=REPLY_KEYBOARD)
         conn.close()
     except Exception as e:
         print(f"Error in start_cmd: {e}")
-        bot.send_message(message.chat.id, "Ошибка базы данных.", reply_markup=REPLY_KEYBOARD)
 
 @bot.message_handler(commands=['games'])
 @bot.message_handler(func=lambda message: message.text == "🎮 Играть")
@@ -164,6 +175,8 @@ def profile_cmd(message):
     tg_id = message.from_user.id
     try:
         conn = get_db_connection()
+        if not conn: return
+
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute("""
                 SELECT u.username, s.coins, s.xp, s.level 
@@ -175,9 +188,9 @@ def profile_cmd(message):
             user_data = cursor.fetchone()
             
             if user_data:
-                coins = user_data['coins'] if user_data['coins'] is not None else 1000
-                xp = user_data['xp'] if user_data['xp'] is not None else 0
-                level = user_data['level'] if user_data['level'] is not None else 1
+                coins = user_data.get('coins', 1000) or 1000
+                xp = user_data.get('xp', 0) or 0
+                level = user_data.get('level', 1) or 1
                 name = user_data['username'] or "Игрок"
                 
                 text = (
@@ -185,8 +198,7 @@ def profile_cmd(message):
                     f"🆔 *Имя*: {name}\n"
                     f"📊 *Уровень*: {level}\n"
                     f"⭐ *Опыт (XP)*: {xp}\n"
-                    f"💰 *Монеты*: {coins}\n\n"
-                    f"💡 _Играй в игры, чтобы заработать больше!_"
+                    f"💰 *Монеты*: {coins}"
                 )
                 bot.send_message(message.chat.id, text, parse_mode='Markdown', reply_markup=REPLY_KEYBOARD)
             else:
@@ -194,7 +206,6 @@ def profile_cmd(message):
         conn.close()
     except Exception as e:
         print(f"Error in profile_cmd: {e}")
-        bot.send_message(message.chat.id, "Ошибка при получении профиля.", reply_markup=REPLY_KEYBOARD)
 
 @bot.message_handler(func=lambda message: message.text == "❓ Помощь")
 def help_cmd(message):
@@ -209,10 +220,14 @@ def stats_cmd(message):
 def send_stats_page(chat_id, tg_id, page, message_id=None, is_edit=False):
     try:
         conn = get_db_connection()
+        if not conn: return
+        
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute("SELECT id FROM users WHERE tg_id=%s", (tg_id,))
             user_row = cursor.fetchone()
-            if not user_row: return
+            if not user_row: 
+                conn.close()
+                return
             user_id = user_row['id']
             
             cursor.execute("""
@@ -227,6 +242,7 @@ def send_stats_page(chat_id, tg_id, page, message_id=None, is_edit=False):
             
             if not best_scores:
                 bot.send_message(chat_id, "Статистики пока нет. Сыграйте в игру!", reply_markup=REPLY_KEYBOARD)
+                conn.close()
                 return
             
             num_games = len(best_scores)
@@ -236,10 +252,16 @@ def send_stats_page(chat_id, tg_id, page, message_id=None, is_edit=False):
             
             created_at = current.get('created_at')
             date_str = "Н/Д"
-            if isinstance(created_at, datetime): date_str = created_at.strftime("%d.%m.%Y %H:%M")
-            elif isinstance(created_at, str): 
-                try: date_str = datetime.fromisoformat(created_at).strftime("%d.%m.%Y %H:%M")
-                except: date_str = created_at
+            # Обработка даты (строка или объект)
+            if created_at:
+                if isinstance(created_at, datetime): 
+                    date_str = created_at.strftime("%d.%m.%Y %H:%M")
+                else: 
+                    # Попытка распарсить строку ISO
+                    try: 
+                        date_str = datetime.fromisoformat(str(created_at)).strftime("%d.%m.%Y %H:%M")
+                    except: 
+                        date_str = str(created_at)
 
             text = f"🏆 *Статистика* ({page+1}/{num_games}):\n\n🕹️ *{game_name}*\n📈 *Рекорд*: {current['score']}\n🗓️ {date_str}"
             
@@ -275,16 +297,18 @@ def stats_callback(call):
         bot.answer_callback_query(call.id)
     except: pass
 
-# =============== FLASK ===============
+# =============== FLASK APP ===============
 app = Flask(__name__, static_folder=SITE_DIR, static_url_path='')
 CORS(app)
 
 @app.route('/')
-def index(): return send_from_directory(SITE_DIR, 'index.html')
+def index(): 
+    return send_from_directory(SITE_DIR, 'index.html')
 
 @app.route('/<path:path>')
 def serve_static(path):
-    if os.path.exists(os.path.join(SITE_DIR, path)): return send_from_directory(SITE_DIR, path)
+    if os.path.exists(os.path.join(SITE_DIR, path)): 
+        return send_from_directory(SITE_DIR, path)
     return send_from_directory(SITE_DIR, 'index.html')
 
 @app.post("/api/auth/verify")
@@ -295,6 +319,8 @@ def verify():
 
     try:
         conn = get_db_connection()
+        if not conn: return jsonify({"success": False, "error": "DB Error"})
+
         with conn.cursor() as cursor:
             cursor.execute("""
                 SELECT users.id, users.username, auth_tokens.expires_at
@@ -306,9 +332,16 @@ def verify():
                 return jsonify({"success": False, "error": "Invalid token"})
 
             user_id, username, expires_at = row
-            if isinstance(expires_at, str): expires_at = datetime.fromisoformat(expires_at)
             
-            if datetime.now(timezone.utc) > expires_at.replace(tzinfo=timezone.utc):
+            # Проверка срока действия
+            now = datetime.now(timezone.utc)
+            # Приводим expires_at к aware datetime, если она строка или naive
+            if isinstance(expires_at, str):
+                expires_at = datetime.fromisoformat(expires_at)
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            
+            if now > expires_at:
                 conn.close()
                 return jsonify({"success": False, "error": "Expired"})
 
@@ -318,9 +351,10 @@ def verify():
             conn.commit()
         conn.close()
         return jsonify({"success": True, "username": username, "session": session_id})
-    except: return jsonify({"success": False})
+    except Exception as e:
+        print(f"Auth verify error: {e}")
+        return jsonify({"success": False})
 
-# --- ЭНДПОИНТ ПОЛУЧЕНИЯ ДАННЫХ (ОБНОВЛЕННЫЙ) ---
 @app.get("/api/user")
 def get_user_info():
     session_id = request.args.get("session")
@@ -328,8 +362,9 @@ def get_user_info():
 
     try:
         conn = get_db_connection()
+        if not conn: return jsonify({"success": False})
+
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            # Получаем данные пользователя
             cursor.execute("""
                 SELECT u.id as user_id, u.username, u.tg_id, s.coins, s.xp 
                 FROM sessions ses
@@ -340,11 +375,11 @@ def get_user_info():
             user_data = cursor.fetchone()
 
             if user_data:
-                # Получаем список ID ачивок пользователя
+                # Получаем ачивки (простой список ID)
                 cursor.execute("SELECT achievement_id FROM user_achievements WHERE user_id=%s", (user_data['user_id'],))
                 achievements = [row['achievement_id'] for row in cursor.fetchall()]
                 
-                # Если монет нет, создаем запись (логика 1000 монет)
+                # Если монет нет, создаем
                 if user_data.get('coins') is None:
                     cursor.execute("""
                         INSERT INTO stats (user_id, xp, coins, level) 
@@ -355,7 +390,7 @@ def get_user_info():
                     user_data['coins'] = 1000
                     user_data['xp'] = 0
 
-                user_data['achievements'] = achievements # Отправляем массив ачивок на фронт
+                user_data['achievements'] = achievements
 
         conn.close()
         if user_data: return jsonify({"success": True, **user_data})
@@ -364,7 +399,6 @@ def get_user_info():
         print(f"User API Error: {e}")
         return jsonify({"success": False})
 
-# --- ЭНДПОИНТ СОХРАНЕНИЯ ОЧКОВ И ПРОВЕРКИ АЧИВОК (ОБНОВЛЕННЫЙ) ---
 @app.post("/api/game/score")
 def save_score_api():
     data = request.get_json()
@@ -379,31 +413,32 @@ def save_score_api():
 
     try:
         conn = get_db_connection()
+        if not conn: return jsonify({"success": False, "error": "DB Error"}), 500
+
         with conn.cursor() as cursor:
-            # 1. Находим юзера по сессии
+            # 1. Находим юзера
             cursor.execute("SELECT u.id, u.tg_id FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.session_id=%s", (session_id,))
             user_row = cursor.fetchone()
             
             if user_row:
                 user_id, tg_id = user_row
                 
-                # 2. Сохраняем рекорд игры (дата как текст или timestamp, здесь isoformat универсален)
+                # 2. Сохраняем рекорд (дата как строка ISO)
+                now_str = datetime.now(timezone.utc).isoformat()
                 cursor.execute("INSERT INTO game_scores (user_id, game_id, score, created_at) VALUES (%s, %s, %s, %s)", 
-                              (user_id, game_id, int(score), datetime.now(timezone.utc).isoformat()))
+                              (user_id, game_id, int(score), now_str))
                 
                 # 3. ПРОВЕРКА АЧИВОК
-                # Получаем уже открытые ачивки этого юзера
                 cursor.execute("SELECT achievement_id FROM user_achievements WHERE user_id=%s", (user_id,))
                 existing_ids = {row[0] for row in cursor.fetchall()}
                 
                 for rule in ACHIEVEMENTS_RULES:
-                    # Проверяем условия: игра совпадает, очков достаточно, ачивки еще нет
                     if rule["game_id"] == str(game_id) and int(score) >= rule["score"] and rule["id"] not in existing_ids:
                         
-                        # Текущая дата как СТРОКА (для совместимости с вашей БД)
+                        # Сохраняем дату получения как простую строку (для совместимости с вашей БД)
                         date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
-                        # Добавляем в БД
+                        # Важно: Используем (user_id, achievement_id, unlocked_at) в соответствии с вашей таблицей
                         cursor.execute("""
                             INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) 
                             VALUES (%s, %s, %s)
@@ -412,22 +447,25 @@ def save_score_api():
                         existing_ids.add(rule["id"])
                         new_unlocked.append(rule)
                         
-                        # Отправляем сообщение в Телеграм
+                        # Отправка в Telegram
                         if tg_id:
                             try:
                                 msg = f"🎉 <b>Новое достижение!</b>\n\n🏆 <b>{rule['name']}</b>\n📝 {rule['desc']}"
                                 bot.send_message(tg_id, msg, parse_mode="HTML")
                             except Exception as e:
-                                print(f"Failed to send TG msg: {e}")
+                                print(f"TG send error: {e}")
 
                 conn.commit()
         conn.close()
-        # Возвращаем новые ачивки для отображения на сайте
         return jsonify({"success": True, "new_achievements": new_unlocked})
     except Exception as e:
         print(f"Save Score Error: {e}")
         return jsonify({"success": False}), 500
 
 if __name__ == "__main__":
-    if BOT_TOKEN: threading.Thread(target=run_bot, daemon=True).start()
+    # Запускаем бота в отдельном потоке, если есть токен
+    if BOT_TOKEN: 
+        threading.Thread(target=run_bot, daemon=True).start()
+    
+    # Запускаем веб-сервер
     app.run(host="0.0.0.0", port=PORT)
