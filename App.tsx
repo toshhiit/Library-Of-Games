@@ -35,8 +35,7 @@ const App: React.FC = () => {
     hasChangedName: false,
   });
   
-  // ИЗМЕНЕНО: Начальное значение 1000 для новых пользователей
-  const [coins, setCoins] = useState(1000); 
+  const [coins, setCoins] = useState(10000); 
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
   // App State
@@ -52,8 +51,9 @@ const App: React.FC = () => {
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
 
-  // --- AUTH INITIALIZATION ---
+  // --- TELEGRAM & BACKEND AUTH INITIALIZATION ---
   useEffect(() => {
+    // 1. Check for Backend Session (Auth Flow)
     const sessionId = localStorage.getItem('session_id');
     if (sessionId) {
       fetch(`/api/user?session=${sessionId}`)
@@ -66,36 +66,50 @@ const App: React.FC = () => {
               tgUsername: data.username ? `@${data.username}` : 'Player',
               displayName: data.username || 'Player',
             }));
-            // Если с сервера пришел 0 или другое число, ставим его. 
-            // Если undefined (ошибка), останется 1000.
             if (data.coins !== undefined) setCoins(data.coins);
           }
         })
         .catch(err => console.error("API Auth Error:", err));
     }
 
+    // 2. Standard Telegram WebApp Init (Visuals & Fallback)
     const tg = window.Telegram?.WebApp;
     if (tg) {
         tg.ready();
-        tg.expand();
+        tg.expand(); // Open full height
+        
+        // Define theme colors for Telegram header to match app
         try {
            tg.headerColor = '#212233';
            tg.backgroundColor = '#0C0D14';
         } catch (e) {
             console.error("Error setting TG colors", e);
         }
+
         const tgUser = tg.initDataUnsafe?.user;
-        if (tgUser && !sessionId) {
+
+        if (tgUser) {
+            // Обновляем данные пользователя из Telegram
+            // БЕРЕМ ФОТО (photo_url) ПРЯМО ИЗ ТЕЛЕГРАМА
             setUser(prev => ({
                 ...prev,
                 tgId: tgUser.id,
                 tgUsername: tgUser.username ? `@${tgUser.username}` : 'No Username',
-                displayName: tgUser.first_name + (tgUser.last_name ? ` ${tgUser.last_name}` : ''),
+                avatar: tgUser.photo_url || prev.avatar, // <-- ВОТ ГЛАВНОЕ ИЗМЕНЕНИЕ
             }));
+
+            // Если сессии нет, обновляем и имя
+            if (!sessionId) {
+                setUser(prev => ({
+                    ...prev,
+                    displayName: tgUser.first_name + (tgUser.last_name ? ` ${tgUser.last_name}` : ''),
+                }));
+            }
         }
     }
   }, []);
 
+  // Derived State
   const filteredGames = GAMES.filter(game => {
     const matchesSearch = game.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = filter === 'all' 
@@ -104,12 +118,13 @@ const App: React.FC = () => {
         ? game.category === 'single' 
         : filter === 'multi'
             ? game.category === 'multi'
-            : favorites.has(game.id);
+            : favorites.has(game.id); // 'favorites' filter
     return matchesSearch && matchesFilter;
   });
 
   const isSakura = user.activeTheme === 'sakura';
 
+  // Handlers
   const handleAddCoins = (amount: number) => {
       setCoins(prev => prev + amount);
       if(window.Telegram?.WebApp?.HapticFeedback) {
@@ -137,7 +152,7 @@ const App: React.FC = () => {
 
   const handleFilterChange = (newFilter: FilterType) => {
     setFilter(newFilter);
-    setIsMenuOpen(false);
+    setIsMenuOpen(false); 
   };
 
   const handleGameSelect = (game: Game) => {
@@ -172,19 +187,33 @@ const App: React.FC = () => {
   
   const handleSaveScore = async (gameId: string, score: number) => {
     const sessionId = localStorage.getItem('session_id');
-    if (!sessionId || !user.tgId) return;
+    if (!sessionId || !user.tgId) {
+        console.warn("Cannot save score: User is not authorized or session is missing.");
+        return;
+    }
 
     try {
-        await fetch("/api/game/score", {
+        const res = await fetch("/api/game/score", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ session: sessionId, game_id: gameId, score: score })
         });
-        if(window.Telegram?.WebApp?.HapticFeedback) {
-            window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            console.log(`Score for ${gameId} saved successfully: ${score}`);
+            if(window.Telegram?.WebApp?.HapticFeedback) {
+                window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+            }
+        } else {
+             console.error("Failed to save score:", data.error);
+             if(window.Telegram?.WebApp?.HapticFeedback) {
+                 window.Telegram.WebApp.HapticFeedback.notificationOccurred('error');
+             }
         }
     } catch (err) {
-        console.error("API Save Score Error:", err);
+        console.error("API Save Score Network Error:", err);
     }
   };
 
@@ -208,6 +237,10 @@ const App: React.FC = () => {
       {isSakura && (
           <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
               <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1522383225653-ed111181a951?q=80&w=2076&auto=format&fit=crop')] bg-cover bg-center opacity-20 mix-blend-screen"></div>
+              <div className="absolute top-[-10%] left-[10%] w-4 h-4 bg-pink-300 rounded-full blur-[1px] animate-[bounce_5s_infinite] opacity-60"></div>
+              <div className="absolute top-[-5%] left-[30%] w-3 h-3 bg-pink-400 rounded-full blur-[1px] animate-[bounce_7s_infinite_1s] opacity-60"></div>
+              <div className="absolute top-[-15%] left-[60%] w-5 h-5 bg-pink-200 rounded-full blur-[1px] animate-[bounce_6s_infinite_0.5s] opacity-50"></div>
+              <div className="absolute top-[-10%] left-[80%] w-3 h-3 bg-white rounded-full blur-[1px] animate-[bounce_8s_infinite_2s] opacity-60"></div>
           </div>
       )}
 
@@ -282,8 +315,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 shrink-0 ml-5">
-            {/* ИЗМЕНЕНО: убрал 'hidden sm:flex', теперь 'flex' */}
-            <div className={`flex px-3 py-1.5 rounded-full items-center gap-2 shadow-lg min-w-[110px] ${isSakura ? 'bg-pink-800' : 'bg-panel'}`}>
+            <div className={`hidden sm:flex px-3 py-1.5 rounded-full items-center gap-2 shadow-lg min-w-[110px] ${isSakura ? 'bg-pink-800' : 'bg-panel'}`}>
               <div className="w-6 h-6 rounded-full bg-yellow-400 border-2 border-yellow-600 flex items-center justify-center text-[10px] font-bold text-yellow-900">
                 $
               </div>
@@ -416,6 +448,12 @@ const App: React.FC = () => {
                   Магазин
                </button>
             </div>
+            
+            <div className="pt-6 border-t border-white/5">
+               <p className="text-xs text-textMuted leading-relaxed">
+                 Выберите категорию, чтобы найти идеальную игру для вашей компании или соло-прохождения.
+               </p>
+            </div>
           </div>
         )}
       </Drawer>
@@ -484,7 +522,9 @@ const App: React.FC = () => {
                    </div>
                    <div className="text-sm font-medium">через Telegram</div>
                  </div>
+                 {user.tgId && <div className="ml-auto w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse"></div>}
               </div>
+              <p className="text-center text-[10px] text-textMuted mt-3 opacity-60">LibraryOfGames v1.3.0</p>
             </div>
           </div>
         )}
