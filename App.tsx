@@ -342,7 +342,7 @@ const App: React.FC = () => {
                 src={user.avatar} 
                 alt="Profile" 
                 className="w-full h-full object-cover"
-                onError={(e) => { e.currentTarget.src = "https://cdn-icons-png.flaticon.com/512/847/847969.png"; }} 
+                onError={(e) => { e.currentTarget.src = "/assets/images/default.png"; }} 
               />
             </button>
           </div>
@@ -491,7 +491,7 @@ const App: React.FC = () => {
                   src={user.avatar} 
                   alt="User" 
                   className="w-full h-full rounded-full object-cover"
-                  onError={(e) => { e.currentTarget.src = "https://cdn-icons-png.flaticon.com/512/847/847969.png"; }} 
+                  onError={(e) => { e.currentTarget.src = "/assets/images/default.png"; }} 
                 />
               </div>
               <h3 className="text-2xl font-bold">{user.displayName}</h3>
