@@ -11,7 +11,7 @@ import {
   Send,
   Settings,
   ShoppingBag,
-  Trophy // <-- Добавили иконку
+  Trophy 
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { GAMES, AVAILABLE_AVATARS } from './constants';
@@ -34,7 +34,7 @@ const App: React.FC = () => {
     activeTheme: 'default',
     activeBoosts: [],
     hasChangedName: false,
-    achievements: [], // <-- ИСПРАВЛЕНИЕ: Добавили инициализацию массива ачивок
+    achievements: [], 
   });
   
   const [coins, setCoins] = useState(10000); 
@@ -43,7 +43,7 @@ const App: React.FC = () => {
   // App State
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [achievementNotification, setAchievementNotification] = useState<{name: string, desc: string} | null>(null); // Уведомление
+  const [achievementNotification, setAchievementNotification] = useState<{name: string, desc: string} | null>(null);
   
   // Drawer View Modes
   const [isSettingsMode, setIsSettingsMode] = useState(false); 
@@ -68,7 +68,7 @@ const App: React.FC = () => {
               tgId: data.tg_id,
               tgUsername: data.username ? `@${data.username}` : 'Player',
               displayName: data.username || 'Player',
-              achievements: data.achievements || [], // Загружаем ачивки с сервера
+              achievements: data.achievements || [],
             }));
             if (data.coins !== undefined) setCoins(data.coins);
           }
@@ -96,6 +96,7 @@ const App: React.FC = () => {
                 ...prev,
                 tgId: tgUser.id,
                 tgUsername: tgUser.username ? `@${tgUser.username}` : 'No Username',
+                // Пытаемся взять фото из ТГ, если нет - оставляем дефолтное
                 avatar: tgUser.photo_url || prev.avatar, 
             }));
 
@@ -200,17 +201,14 @@ const App: React.FC = () => {
         const data = await res.json();
         
         if (data.success) {
-            // ПРОВЕРКА НОВЫХ АЧИВОК
             if (data.new_achievements && data.new_achievements.length > 0) {
                 const newAch = data.new_achievements[0];
                 
-                // Добавляем в стейт юзера
                 setUser(prev => ({
                     ...prev,
                     achievements: [...(prev.achievements || []), newAch.id]
                 }));
 
-                // Показываем уведомление
                 setAchievementNotification({ name: newAch.name, desc: newAch.desc });
                 setTimeout(() => setAchievementNotification(null), 4000);
                 
@@ -246,7 +244,6 @@ const App: React.FC = () => {
       {isSakura && (
           <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
               <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1522383225653-ed111181a951?q=80&w=2076&auto=format&fit=crop')] bg-cover bg-center opacity-20 mix-blend-screen"></div>
-              {/* Sakura Particles */}
               <div className="absolute top-[-10%] left-[10%] w-4 h-4 bg-pink-300 rounded-full blur-[1px] animate-[bounce_5s_infinite] opacity-60"></div>
               <div className="absolute top-[-5%] left-[30%] w-3 h-3 bg-pink-400 rounded-full blur-[1px] animate-[bounce_7s_infinite_1s] opacity-60"></div>
               <div className="absolute top-[-15%] left-[60%] w-5 h-5 bg-pink-200 rounded-full blur-[1px] animate-[bounce_6s_infinite_0.5s] opacity-50"></div>
@@ -341,7 +338,12 @@ const App: React.FC = () => {
               onClick={() => setIsProfileOpen(true)}
               className={`w-[38px] h-[38px] rounded-full p-0 overflow-hidden border-2 border-transparent hover:border-yellow-400 transition-all shadow-lg ${isSakura ? 'bg-pink-800' : 'bg-panel'}`}
             >
-              <img src={user.avatar} alt="Profile" className="w-full h-full object-cover" />
+              <img 
+                src={user.avatar} 
+                alt="Profile" 
+                className="w-full h-full object-cover"
+                onError={(e) => { e.currentTarget.src = "https://cdn-icons-png.flaticon.com/512/847/847969.png"; }} 
+              />
             </button>
           </div>
         </div>
@@ -485,7 +487,12 @@ const App: React.FC = () => {
           <div className="flex flex-col h-full animate-in slide-in-from-right duration-300">
             <div className="flex flex-col items-center mb-8">
               <div className="w-24 h-24 rounded-full p-1 border-2 border-yellow-400/50 mb-4 shadow-glow relative">
-                <img src={user.avatar} alt="User" className="w-full h-full rounded-full object-cover" />
+                <img 
+                  src={user.avatar} 
+                  alt="User" 
+                  className="w-full h-full rounded-full object-cover"
+                  onError={(e) => { e.currentTarget.src = "https://cdn-icons-png.flaticon.com/512/847/847969.png"; }} 
+                />
               </div>
               <h3 className="text-2xl font-bold">{user.displayName}</h3>
               <p className="text-textMuted">{user.tgUsername}</p>
