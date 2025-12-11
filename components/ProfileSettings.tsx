@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
-import { Save, Check, AlertCircle, Coins, ArrowLeft, Trophy, Lock } from 'lucide-react'; // Добавлены Trophy и Lock
-import { ACHIEVEMENTS_LIST } from '../constants'; // Импортируйте список ачивок
+import { Save, Check, AlertCircle, Coins, ArrowLeft, Trophy, Lock } from 'lucide-react'; 
+import { ACHIEVEMENTS_LIST } from '../constants'; 
 
 interface ProfileSettingsProps {
   user: UserProfile;
@@ -97,7 +97,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
           </div>
         </div>
 
-        {/* Avatar Display (Selection removed) */}
+        {/* Avatar Display */}
         <div className="space-y-3">
            <label className="text-xs text-textMuted font-bold uppercase">Аватар</label>
            <div className="p-4 bg-white/5 rounded-xl flex items-center gap-4 border border-white/5">
@@ -105,7 +105,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
                 src={user.avatar} 
                 alt="Current Avatar" 
                 className="w-16 h-16 rounded-full object-cover border-2 border-yellow-400/50" 
-                onError={(e) => { e.currentTarget.src = "https://cdn-icons-png.flaticon.com/512/847/847969.png"; }} 
+                onError={(e) => { e.currentTarget.src = "/assets/images/default.png"; }} 
               />
               <div className="flex flex-col">
                   <span className="font-bold text-sm">Фото профиля</span>
@@ -114,7 +114,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
            </div>
         </div>
 
-        {/* --- СЕКЦИЯ ДОСТИЖЕНИЙ (Добавлена в прошлом шаге, сохраняем) --- */}
+        {/* --- СЕКЦИЯ ДОСТИЖЕНИЙ --- */}
         <div className="space-y-3 pt-4 border-t border-white/10">
            <label className="text-xs text-textMuted font-bold uppercase flex items-center gap-2">
               <Trophy size={14} className="text-yellow-500" />
