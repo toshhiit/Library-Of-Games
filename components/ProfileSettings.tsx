@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
-import { Save, Check, AlertCircle, Coins, ArrowLeft } from 'lucide-react';
+import { Save, Check, AlertCircle, Coins, ArrowLeft, Trophy, Lock } from 'lucide-react'; // Добавлены Trophy и Lock
+import { ACHIEVEMENTS_LIST } from '../constants'; // Импортируйте список ачивок
 
 interface ProfileSettingsProps {
   user: UserProfile;
@@ -100,11 +101,56 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
         <div className="space-y-3">
            <label className="text-xs text-textMuted font-bold uppercase">Аватар</label>
            <div className="p-4 bg-white/5 rounded-xl flex items-center gap-4 border border-white/5">
-              <img src={user.avatar} alt="Current Avatar" className="w-16 h-16 rounded-full object-cover border-2 border-yellow-400/50" />
+              <img 
+                src={user.avatar} 
+                alt="Current Avatar" 
+                className="w-16 h-16 rounded-full object-cover border-2 border-yellow-400/50" 
+                onError={(e) => { e.currentTarget.src = "https://cdn-icons-png.flaticon.com/512/847/847969.png"; }} 
+              />
               <div className="flex flex-col">
                   <span className="font-bold text-sm">Фото профиля</span>
                   <span className="text-xs text-textMuted">Используется ваше фото из Telegram.</span>
               </div>
+           </div>
+        </div>
+
+        {/* --- СЕКЦИЯ ДОСТИЖЕНИЙ (Добавлена в прошлом шаге, сохраняем) --- */}
+        <div className="space-y-3 pt-4 border-t border-white/10">
+           <label className="text-xs text-textMuted font-bold uppercase flex items-center gap-2">
+              <Trophy size={14} className="text-yellow-500" />
+              Достижения ({user.achievements?.length || 0} / {ACHIEVEMENTS_LIST.length})
+           </label>
+           
+           <div className="grid grid-cols-1 gap-2">
+              {ACHIEVEMENTS_LIST.map(ach => {
+                  const isUnlocked = user.achievements?.includes(ach.id);
+                  
+                  return (
+                      <div 
+                        key={ach.id} 
+                        className={`p-3 rounded-xl border flex items-center gap-3 transition-colors ${
+                            isUnlocked 
+                                ? 'bg-yellow-500/10 border-yellow-500/20' 
+                                : 'bg-white/5 border-white/5 opacity-50'
+                        }`}
+                      >
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg shadow-inner ${
+                              isUnlocked ? 'bg-[#0C0D14]' : 'bg-black/20'
+                          }`}>
+                              {isUnlocked ? ach.icon : <Lock size={16} />}
+                          </div>
+                          
+                          <div className="flex-1">
+                              <div className={`font-bold text-sm ${isUnlocked ? 'text-white' : 'text-textMuted'}`}>
+                                  {ach.name}
+                              </div>
+                              <div className="text-xs text-textMuted leading-tight">
+                                  {ach.description}
+                              </div>
+                          </div>
+                      </div>
+                  );
+              })}
            </div>
         </div>
 
