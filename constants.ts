@@ -1,4 +1,6 @@
-import { Game, AvatarItem, ShopItem } from './types';
+// toshhiit/library-of-games/Library-Of-Games-main/constants.ts
+
+import { Game, AvatarItem, ShopItem, Achievement } from './types';
 
 // Using local paths now
 export const GAMES: Game[] = [
@@ -7,67 +9,99 @@ export const GAMES: Game[] = [
     name: '2048', 
     image: '/assets/images/2048.png', 
     category: 'single',
-    description: 'Join the numbers and get to the 2048 tile!'
+    description: 'Join the numbers and get to the 2048 tile!',
+    controls: [
+      { type: 'arrows', description: 'Перемещение плиток' }
+    ]
   },
   { 
     id: '2', 
     name: 'Snake', 
     image: '/assets/images/snake.png', 
     category: 'single',
-    description: 'Classic snake game. Eat apples, grow longer.'
+    description: 'Classic snake game. Eat apples, grow longer.',
+    controls: [
+      { type: 'arrows', description: 'Управление змейкой' }
+    ]
   },
   { 
     id: '3', 
     name: 'Dino Run', 
     image: '/assets/images/dino.png', 
     category: 'single',
-    description: 'Run as far as you can without hitting obstacles.'
+    description: 'Run as far as you can without hitting obstacles.',
+    controls: [
+      { type: 'space', description: 'Прыжок' },
+      { type: 'arrows', description: 'Пригнуться (вниз)' }
+    ]
   },
   { 
     id: '4', 
     name: 'Clicker', 
     image: '/assets/images/clicker.png', 
     category: 'single',
-    description: 'Click to earn points and upgrade.'
+    description: 'Click to earn points and upgrade.',
+    controls: [
+      { type: 'click', description: 'Клик для заработка' },
+      { type: 'mouse', description: 'Покупка улучшений' }
+    ]
   },
   { 
     id: '5', 
     name: 'Шашки', 
     image: '/assets/images/checkers.png', 
     category: 'multi',
-    description: 'Classic checkers board game for two players.'
+    description: 'Classic checkers board game for two players.',
+    controls: [
+      { type: 'mouse', description: 'Выбор и ход фигурой' }
+    ]
   },
   { 
     id: '6', 
     name: 'Сапёр', 
     image: '/assets/images/saper.png', 
     category: 'single',
-    description: 'Clear the board without detonating any mines.'
+    description: 'Clear the board without detonating any mines.',
+    controls: [
+      { type: 'click', description: 'Открыть клетку' },
+      { type: 'mouse', description: 'ПКМ - Флаг' }
+    ]
   },
   { 
     id: '7', 
     name: 'Пасьянс', 
     image: '/assets/images/pasyans.png', 
     category: 'single',
-    description: 'Organize cards in specific order.'
+    description: 'Organize cards in specific order.',
+    controls: [
+      { type: 'drag', description: 'Перетаскивание карт' },
+      { type: 'click', description: 'Авто-сбор (двойной клик)' }
+    ]
   },
   { 
     id: '8', 
     name: 'Tetris', 
     image: '/assets/images/blockblast.png', 
     category: 'single',
-    description: 'Fit blocks together to clear lines.'
+    description: 'Fit blocks together to clear lines.',
+    controls: [
+      { type: 'arrows', description: 'Перемещение и вращение' },
+      { type: 'space', description: 'Быстрое падение' }
+    ]
   },
   { 
     id: '9', 
     name: 'Paint', 
     image: '/assets/images/paint.png', 
     category: 'multi',
-    description: 'Draw together or compete in art challenges.'
+    description: 'Draw together or compete in art challenges.',
+    controls: [
+      { type: 'mouse', description: 'Рисование' },
+      { type: 'click', description: 'Смена инструментов' }
+    ]
   }
 ];
 
-// ИСПРАВЛЕН ПУТЬ: удалено /avatars/
 export const AVAILABLE_AVATARS: AvatarItem[] = [
   { id: 'default', url: '/assets/images/default.png', price: 0 }
 ];
@@ -102,8 +136,6 @@ export const SHOP_ITEMS: ShopItem[] = [
   }
 ];
 
-// Achievements List for Frontend
-import { Achievement } from './types';
 export const ACHIEVEMENTS_LIST: Achievement[] = [
   { id: '2048_novice', name: 'Новичок 2048', description: 'Набрал 1000 очков в 2048', icon: '🧩' },
   { id: '2048_pro', name: 'Профи 2048', description: 'Набрал 5000 очков в 2048', icon: '🧠' },
