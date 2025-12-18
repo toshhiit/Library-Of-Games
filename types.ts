@@ -1,8 +1,16 @@
+// toshhiit/library-of-games/Library-Of-Games-main/types.ts
+
 export interface Achievement {
   id: string;
   name: string;
   description: string;
   icon: string;
+}
+
+// Добавляем новый интерфейс для управления
+export interface GameControl {
+  type: 'arrows' | 'space' | 'mouse' | 'click' | 'drag';
+  description: string;
 }
 
 export interface Game {
@@ -11,6 +19,7 @@ export interface Game {
   image: string;
   category: 'single' | 'multi';
   description: string;
+  controls: GameControl[]; // <-- Новое поле
 }
 
 export type FilterType = 'all' | 'single' | 'multi' | 'favorites';
@@ -45,7 +54,7 @@ export interface UserProfile {
   activeTheme: ThemeType;
   activeBoosts: string[];
   hasChangedName: boolean;
-  achievements: string[]; // <--- ДОБАВЛЕНО ПОЛЕ ДЛЯ АЧИВОК
+  achievements: string[];
 }
 
 // Telegram Web App Types
