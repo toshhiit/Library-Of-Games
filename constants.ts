@@ -129,7 +129,7 @@ export const SHOP_ITEMS: ShopItem[] = [
     id: 'theme_sakura',
     name: 'Стиль Сакуры',
     description: 'Меняет дизайн сайта и игр на нежный стиль цветущей вишни.',
-    price: 10000,
+    price: 100, // <--- ЦЕНА ИЗМЕНЕНА НА 100
     type: 'theme',
     value: 'sakura',
     image: 'https://picsum.photos/seed/sakuratheme/200/200'
