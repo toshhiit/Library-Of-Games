@@ -1,7 +1,10 @@
+// toshhiit/library-of-games/Library-Of-Games-main/components/GamePage.tsx
+
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Maximize2, Info, Keyboard, RotateCcw, ArrowUp, ArrowDown, ArrowRight } from 'lucide-react';
-import { Game, ThemeType } from '../types';
+// Добавлены новые иконки для управления
+import { ArrowLeft, Maximize2, Info, Keyboard, RotateCcw, ArrowUp, ArrowDown, ArrowRight, MousePointer2, Hand, Move } from 'lucide-react';
+import { Game, ThemeType, GameControl } from '../types';
 import { Game2048, SnakeGame, DinoGame, ClickerGame, MinesweeperGame, CheckersGame, PaintGame, TetrisGame, SolitaireGame } from './GameMechanics';
 
 interface GamePageProps {
@@ -9,7 +12,7 @@ interface GamePageProps {
   theme?: ThemeType;
   onBack: () => void;
   onEarnCoins: (amount: number) => void;
-  onSpendCoins: (amount: number) => boolean; // Добавлено
+  onSpendCoins: (amount: number) => boolean;
   onSaveScore: (gameId: string, score: number) => void;
 }
 
@@ -26,7 +29,7 @@ const GamePage: React.FC<GamePageProps> = ({ game, theme = 'default', onBack, on
       case 'Шашки': return <CheckersGame />;
       case 'Paint': return <PaintGame />;
       case 'Tetris': return <TetrisGame gameId={game.id} onSaveScore={onSaveScore} theme={theme} />;
-      case 'Пасьянс': return <SolitaireGame onSpendCoins={onSpendCoins} />; // Передаем функцию списания
+      case 'Пасьянс': return <SolitaireGame onSpendCoins={onSpendCoins} />;
       default: return (
         <div className="flex flex-col items-center justify-center h-full text-textMuted">
           <p>Игра в разработке...</p>
@@ -36,6 +39,35 @@ const GamePage: React.FC<GamePageProps> = ({ game, theme = 'default', onBack, on
   };
 
   const isSakura = theme === 'sakura';
+
+  // Функция для отрисовки иконки управления
+  const renderControlIcon = (type: GameControl['type']) => {
+    const iconClass = "w-8 h-8 rounded border border-white/20 flex items-center justify-center text-xs bg-white/5";
+    
+    switch (type) {
+      case 'arrows':
+        return (
+           <div className="flex flex-col items-center gap-1">
+              <div className={iconClass}><ArrowUp size={16}/></div>
+              <div className="flex gap-1">
+                <div className={iconClass}><ArrowLeft size={16}/></div>
+                <div className={iconClass}><ArrowDown size={16}/></div>
+                <div className={iconClass}><ArrowRight size={16}/></div>
+              </div>
+            </div>
+        );
+      case 'space':
+        return <div className="h-8 px-3 rounded border border-white/20 flex items-center justify-center text-xs bg-white/5 min-w-[60px]">Space</div>;
+      case 'mouse':
+        return <div className={iconClass}><MousePointer2 size={16}/></div>;
+      case 'click':
+        return <div className={iconClass}><Hand size={16}/></div>;
+      case 'drag':
+        return <div className={iconClass}><Move size={16}/></div>;
+      default:
+        return <div className={iconClass}>?</div>;
+    }
+  };
 
   return (
     <motion.div
@@ -134,26 +166,18 @@ const GamePage: React.FC<GamePageProps> = ({ game, theme = 'default', onBack, on
                     <Keyboard size={24} className="text-blue-400" />
                     <h2 className="text-xl font-bold">Управление</h2>
                 </div>
+                {/* Динамический блок управления */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="bg-white/5 p-4 rounded-xl flex items-center gap-3">
-                    <div className="flex flex-col items-center gap-1">
-                      <div className="w-8 h-8 rounded border border-white/20 flex items-center justify-center text-xs bg-white/5"><ArrowUp size={16}/></div>
-                      <div className="flex gap-1">
-                        <div className="w-8 h-8 rounded border border-white/20 flex items-center justify-center text-xs bg-white/5"><ArrowLeft size={16}/></div>
-                        <div className="w-8 h-8 rounded border border-white/20 flex items-center justify-center text-xs bg-white/5"><ArrowDown size={16}/></div>
-                        <div className="w-8 h-8 rounded border border-white/20 flex items-center justify-center text-xs bg-white/5"><ArrowRight size={16}/></div>
+                  {game.controls && game.controls.length > 0 ? (
+                    game.controls.map((control, index) => (
+                      <div key={index} className="bg-white/5 p-4 rounded-xl flex items-center gap-3">
+                        {renderControlIcon(control.type)}
+                        <span className="text-sm text-textMuted">{control.description}</span>
                       </div>
-                    </div>
-                    <span className="text-sm text-textMuted">Перемещение (ПК / Сенсор)</span>
-                  </div>
-                  <div className="bg-white/5 p-4 rounded-xl flex items-center gap-3">
-                    <div className="h-8 px-3 rounded border border-white/20 flex items-center justify-center text-xs bg-white/5">Space</div>
-                    <span className="text-sm text-textMuted">Действие / Прыжок</span>
-                  </div>
-                  <div className="bg-white/5 p-4 rounded-xl flex items-center gap-3">
-                     <div className="w-8 h-8 rounded border border-white/20 flex items-center justify-center text-xs bg-white/5">🖱️</div>
-                     <span className="text-sm text-textMuted">Взаимодействие</span>
-                  </div>
+                    ))
+                  ) : (
+                    <div className="text-textMuted text-sm">Управление не указано</div>
+                  )}
                 </div>
             </div>
         </div>
