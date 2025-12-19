@@ -35,7 +35,9 @@ const App: React.FC = () => {
     activeBoosts: [],
     hasChangedName: false,
     achievements: [], 
-  });
+    xp: 0, // Добавили XP в дефолтное состояние
+    level: 1 
+  } as UserProfile);
   
   const [coins, setCoins] = useState(10000); 
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
@@ -44,6 +46,7 @@ const App: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [achievementNotification, setAchievementNotification] = useState<{name: string, desc: string} | null>(null);
+  const [rewardNotification, setRewardNotification] = useState<{coins: number, xp: number} | null>(null); // Уведомление о награде
   
   // Drawer View Modes
   const [isSettingsMode, setIsSettingsMode] = useState(false); 
@@ -69,6 +72,10 @@ const App: React.FC = () => {
               tgUsername: data.username ? `@${data.username}` : 'Player',
               displayName: data.username || 'Player',
               achievements: data.achievements || [],
+              xp: data.xp || 0,
+              level: data.level || 1,
+              // Если сервер прислал аватарку (из ТГ), используем её
+              avatar: data.avatar_url || prev.avatar 
             }));
             if (data.coins !== undefined) setCoins(data.coins);
           }
@@ -96,7 +103,7 @@ const App: React.FC = () => {
                 ...prev,
                 tgId: tgUser.id,
                 tgUsername: tgUser.username ? `@${tgUser.username}` : 'No Username',
-                // Пытаемся взять фото из ТГ, если нет - оставляем дефолтное
+                // Пытаемся взять фото из initData, если сервер еще не ответил
                 avatar: tgUser.photo_url || prev.avatar, 
             }));
 
@@ -201,6 +208,22 @@ const App: React.FC = () => {
         const data = await res.json();
         
         if (data.success) {
+            // --- ОБНОВЛЕНИЕ МОНЕТ И ОПЫТА ---
+            if (data.earned_coins || data.earned_xp) {
+                const c = data.earned_coins || 0;
+                const x = data.earned_xp || 0;
+                
+                setCoins(prev => prev + c);
+                setUser(prev => ({ ...prev, xp: (prev.xp || 0) + x }));
+                
+                // Показываем уведомление о награде (необязательно, но приятно)
+                if (c > 0 || x > 0) {
+                     setRewardNotification({ coins: c, xp: x });
+                     setTimeout(() => setRewardNotification(null), 3000);
+                }
+            }
+
+            // --- ОБРАБОТКА ДОСТИЖЕНИЙ ---
             if (data.new_achievements && data.new_achievements.length > 0) {
                 const newAch = data.new_achievements[0];
                 
@@ -216,7 +239,8 @@ const App: React.FC = () => {
                     window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
                 }
             } else if(window.Telegram?.WebApp?.HapticFeedback) {
-                window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+                // Легкая вибрация при успешном сохранении
+                window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
             }
         }
     } catch (err) {
@@ -505,8 +529,8 @@ const App: React.FC = () => {
                   <span className="text-xs text-textMuted uppercase mt-1">Монеты</span>
                </div>
                <div className="bg-white/5 rounded-xl p-3 flex flex-col items-center">
-                  <span className="text-2xl font-bold text-blue-400">{favorites.size}</span>
-                  <span className="text-xs text-textMuted uppercase mt-1">Избранное</span>
+                  <span className="text-2xl font-bold text-blue-400">{user.xp || 0}</span>
+                  <span className="text-xs text-textMuted uppercase mt-1">Опыт (XP)</span>
                </div>
             </div>
 
@@ -569,6 +593,22 @@ const App: React.FC = () => {
                 </div>
               </div>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* REWARD NOTIFICATION */}
+      <AnimatePresence>
+        {rewardNotification && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[90] bg-black/80 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-3"
+          >
+             <span className="text-yellow-400 font-bold">+{rewardNotification.coins} $</span>
+             <span className="w-1 h-1 rounded-full bg-white/20"></span>
+             <span className="text-blue-400 font-bold">+{rewardNotification.xp} XP</span>
           </motion.div>
         )}
       </AnimatePresence>
