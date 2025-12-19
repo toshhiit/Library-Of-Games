@@ -71,6 +71,78 @@ def get_db_connection():
         print(f"DB Connection Error: {e}")
         return None
 
+# Функция инициализации таблиц (чтобы база не была пустой)
+def init_db():
+    try:
+        conn = get_db_connection()
+        if not conn:
+            print("Could not connect to DB for init.")
+            return
+        
+        with conn.cursor() as cursor:
+            # Таблица пользователей
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    tg_id BIGINT UNIQUE NOT NULL,
+                    username TEXT
+                );
+            """)
+            # Таблица статистики
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS stats (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    xp INTEGER DEFAULT 0,
+                    coins INTEGER DEFAULT 1000,
+                    level INTEGER DEFAULT 1,
+                    CONSTRAINT unique_user_stats UNIQUE (user_id)
+                );
+            """)
+            # Таблица очков игр
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS game_scores (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    game_id TEXT NOT NULL,
+                    score INTEGER NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            # Таблица достижений
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_achievements (
+                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    achievement_id TEXT NOT NULL,
+                    unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (user_id, achievement_id)
+                );
+            """)
+            # Токены авторизации
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS auth_tokens (
+                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    token TEXT UNIQUE NOT NULL,
+                    expires_at TIMESTAMP NOT NULL
+                );
+            """)
+            # Сессии
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sessions (
+                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    session_id TEXT UNIQUE NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            conn.commit()
+            print("Database initialized successfully.")
+        conn.close()
+    except Exception as e:
+        print(f"Error initializing DB: {e}")
+
+# Запускаем инициализацию при старте
+init_db()
+
 # =============== BOT HANDLERS ===================
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -80,6 +152,24 @@ def run_bot():
         bot.infinity_polling()
     except Exception as e:
         print(f"Bot polling error: {e}")
+
+# --- СКРЫТАЯ КОМАНДА CLEAR ---
+@bot.message_handler(commands=['clear'])
+def clear_db_cmd(message):
+    # Эта команда нигде не афишируется
+    try:
+        conn = get_db_connection()
+        if conn:
+            with conn.cursor() as cursor:
+                # Очищаем все основные таблицы
+                cursor.execute("TRUNCATE TABLE game_scores, user_achievements, auth_tokens, sessions, stats, users RESTART IDENTITY CASCADE;")
+                conn.commit()
+            conn.close()
+            bot.reply_to(message, "🗑️ База данных полностью очищена.")
+        else:
+            bot.reply_to(message, "Ошибка подключения к БД.")
+    except Exception as e:
+        bot.reply_to(message, f"Ошибка при очистке: {e}")
 
 def handle_games_request(message):
     tg_id = message.from_user.id
@@ -135,11 +225,13 @@ def start_cmd(message):
             user = cursor.fetchone()
 
             if not user:
+                # Создаем пользователя
                 cursor.execute(
                     "INSERT INTO users (tg_id, username) VALUES (%s, %s) RETURNING id",
                     (tg_id, username)
                 )
                 new_user_id = cursor.fetchone()[0]
+                # Создаем статистику
                 cursor.execute(
                     "INSERT INTO stats (user_id, xp, coins, level) VALUES (%s, 0, 1000, 1)",
                     (new_user_id,)
@@ -148,7 +240,7 @@ def start_cmd(message):
                 bot.send_message(message.chat.id, "Добро пожаловать! Вам начислено 1000 монет 💰", reply_markup=REPLY_KEYBOARD)
             else:
                 user_id = user[0]
-                # Безопасная проверка существования статов
+                # Проверяем, есть ли статы, если нет - создаем
                 cursor.execute("SELECT id FROM stats WHERE user_id=%s", (user_id,))
                 if not cursor.fetchone():
                      cursor.execute("INSERT INTO stats (user_id, xp, coins, level) VALUES (%s, 0, 1000, 1)", (user_id,))
@@ -158,6 +250,7 @@ def start_cmd(message):
         conn.close()
     except Exception as e:
         print(f"Error in start_cmd: {e}")
+        bot.send_message(message.chat.id, "Произошла ошибка при регистрации.")
 
 @bot.message_handler(commands=['games'])
 @bot.message_handler(func=lambda message: message.text == "🎮 Играть")
@@ -183,10 +276,10 @@ def profile_cmd(message):
             user_data = cursor.fetchone()
             
             if user_data:
-                coins = user_data.get('coins', 1000) or 1000
-                xp = user_data.get('xp', 0) or 0
-                level = user_data.get('level', 1) or 1
-                name = user_data['username'] or "Игрок"
+                coins = user_data.get('coins', 1000)
+                xp = user_data.get('xp', 0)
+                level = user_data.get('level', 1)
+                name = user_data.get('username') or "Игрок"
                 
                 text = (
                     f"👤 *Твой Профиль*\n\n"
@@ -369,18 +462,14 @@ def get_user_info():
                 cursor.execute("SELECT achievement_id FROM user_achievements WHERE user_id=%s", (user_data['user_id'],))
                 achievements = [row['achievement_id'] for row in cursor.fetchall()]
                 
-                # ИСПРАВЛЕНИЕ: Безопасное создание статистики без ON CONFLICT
+                # Если статистики нет (вдруг удалилась) - создаем
                 if user_data.get('coins') is None:
-                    # Сначала проверяем, есть ли запись
-                    cursor.execute("SELECT id FROM stats WHERE user_id=%s", (user_data['user_id'],))
-                    if not cursor.fetchone():
-                        # Если нет - создаем
-                        cursor.execute("""
-                            INSERT INTO stats (user_id, xp, coins, level) 
-                            VALUES (%s, 0, 1000, 1) 
-                        """, (user_data['user_id'],))
-                        conn.commit()
-                    
+                    cursor.execute("""
+                        INSERT INTO stats (user_id, xp, coins, level) 
+                        VALUES (%s, 0, 1000, 1) 
+                        ON CONFLICT (user_id) DO NOTHING
+                    """, (user_data['user_id'],))
+                    conn.commit()
                     user_data['coins'] = 1000
                     user_data['xp'] = 0
 
@@ -404,6 +493,7 @@ def save_score_api():
         return jsonify({"success": False}), 400
     
     new_unlocked = [] 
+    score_val = int(score)
 
     try:
         conn = get_db_connection()
@@ -417,14 +507,28 @@ def save_score_api():
                 user_id, tg_id = user_row
                 
                 now_str = datetime.now(timezone.utc).isoformat()
-                cursor.execute("INSERT INTO game_scores (user_id, game_id, score, created_at) VALUES (%s, %s, %s, %s)", 
-                              (user_id, game_id, int(score), now_str))
                 
+                # 1. Сохраняем рекорд игры
+                cursor.execute("INSERT INTO game_scores (user_id, game_id, score, created_at) VALUES (%s, %s, %s, %s)", 
+                              (user_id, game_id, score_val, now_str))
+                
+                # 2. ОБНОВЛЯЕМ СТАТИСТИКУ (XP и Coins)
+                # Логика: 10% от очков идет в монеты, 50% в XP
+                earned_coins = max(1, int(score_val * 0.1))
+                earned_xp = max(1, int(score_val * 0.5))
+                
+                cursor.execute("""
+                    UPDATE stats 
+                    SET coins = coins + %s, xp = xp + %s 
+                    WHERE user_id = %s
+                """, (earned_coins, earned_xp, user_id))
+                
+                # 3. Проверка достижений
                 cursor.execute("SELECT achievement_id FROM user_achievements WHERE user_id=%s", (user_id,))
                 existing_ids = {row[0] for row in cursor.fetchall()}
                 
                 for rule in ACHIEVEMENTS_RULES:
-                    if rule["game_id"] == str(game_id) and int(score) >= rule["score"] and rule["id"] not in existing_ids:
+                    if rule["game_id"] == str(game_id) and score_val >= rule["score"] and rule["id"] not in existing_ids:
                         
                         date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
                         cursor.execute("""
@@ -444,7 +548,7 @@ def save_score_api():
 
                 conn.commit()
         conn.close()
-        return jsonify({"success": True, "new_achievements": new_unlocked})
+        return jsonify({"success": True, "new_achievements": new_unlocked, "earned_coins": earned_coins, "earned_xp": earned_xp})
     except Exception as e:
         print(f"Save Score Error: {e}")
         return jsonify({"success": False}), 500
