@@ -34,6 +34,7 @@ const App: React.FC = () => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [achievementNotification, setAchievementNotification] = useState<{name: string, desc: string} | null>(null);
   const [rewardNotification, setRewardNotification] = useState<{coins: number, xp: number} | null>(null);
+  const [levelUpNotification, setLevelUpNotification] = useState<number | null>(null); // Уведомление об уровне
   
   const [isSettingsMode, setIsSettingsMode] = useState(false); 
   const [isShopMode, setIsShopMode] = useState(false);
@@ -43,11 +44,10 @@ const App: React.FC = () => {
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
 
-  // --- API HELPER ДЛЯ ОБНОВЛЕНИЯ ДАННЫХ ---
+  // --- API HELPER ---
   const callUpdateApi = async (action: string, payload: any) => {
       const sessionId = localStorage.getItem('session_id');
       if (!sessionId) return false;
-
       try {
           const res = await fetch("/api/user/update", {
               method: "POST",
@@ -56,7 +56,7 @@ const App: React.FC = () => {
           });
           const data = await res.json();
           if (data.success && data.coins !== undefined) {
-              setCoins(data.coins); // Синхронизируем монеты с сервером
+              setCoins(data.coins);
           }
           return data.success;
       } catch (e) {
@@ -81,15 +81,13 @@ const App: React.FC = () => {
               xp: data.xp || 0,
               level: data.level || 1,
               avatar: data.avatar_url || prev.avatar,
-              // Загружаем инвентарь и настройки из базы
               inventory: data.inventory || [],
               activeTheme: data.active_theme || 'default',
               hasChangedName: data.has_changed_name || false
             }));
             if (data.coins !== undefined) setCoins(data.coins);
           }
-        })
-        .catch(err => console.error("API Auth Error:", err));
+        });
     }
 
     const tg = window.Telegram?.WebApp;
@@ -121,54 +119,35 @@ const App: React.FC = () => {
   const isSakura = user.activeTheme === 'sakura';
 
   const handleAddCoins = (amount: number) => {
-      // Это локально для визуализации, реальное начисление идет через saveScore
       setCoins(prev => prev + amount);
   };
   
-  // --- ОБНОВЛЕННАЯ ФУНКЦИЯ ТРАТЫ МОНЕТ ---
   const handleSpendCoins = (amount: number, itemId?: string, type?: 'theme' | 'item' | 'name', newVal?: string): boolean => {
     if (coins < amount) {
         if(window.Telegram?.WebApp?.HapticFeedback) window.Telegram.WebApp.HapticFeedback.notificationOccurred('error');
         return false;
     }
-
-    // Оптимистичное обновление (сразу меняем интерфейс)
     setCoins(prev => prev - amount);
-    
-    // Отправляем запрос на сервер
     if (type === 'item' && itemId) {
         callUpdateApi('buy', { item_id: itemId, price: amount }).then(success => {
-             if (success) {
-                 setUser(prev => ({ ...prev, inventory: [...prev.inventory, itemId] }));
-             } else {
-                 setCoins(prev => prev + amount); // Откат если ошибка
-             }
+             if (success) setUser(prev => ({ ...prev, inventory: [...prev.inventory, itemId] }));
+             else setCoins(prev => prev + amount);
         });
     } else if (type === 'name' && newVal) {
         callUpdateApi('change_name', { name: newVal, price: amount });
-        // setUser обновляется в ProfileSettings
     }
-    
     if(window.Telegram?.WebApp?.HapticFeedback) window.Telegram.WebApp.HapticFeedback.selectionChanged();
     return true;
   };
 
-  // Обертка для смены имени
   const handleUpdateUserWrapper = (updates: Partial<UserProfile>) => {
-      // Если меняется имя или тема, нужно сообщить серверу
-      if (updates.activeTheme) {
-          callUpdateApi('set_theme', { theme: updates.activeTheme });
-      }
-      if (updates.displayName) {
-          // Имя обрабатывается отдельно в ProfileSettings, здесь просто стейт
-      }
+      if (updates.activeTheme) callUpdateApi('set_theme', { theme: updates.activeTheme });
       setUser(prev => ({ ...prev, ...updates }));
   };
 
   const handleFilterChange = (newFilter: FilterType) => { setFilter(newFilter); setIsMenuOpen(false); };
   const handleGameSelect = (game: Game) => { setSelectedGame(game); setShowSearchResults(false); setSearchQuery(''); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   const handleBackToGrid = () => { setSelectedGame(null); };
-
   const toggleFavorite = (e: React.MouseEvent, gameId: string) => {
     e.stopPropagation();
     setFavorites(prev => {
@@ -189,13 +168,23 @@ const App: React.FC = () => {
         });
         const data = await res.json();
         if (data.success) {
-            if (data.earned_coins || data.earned_xp) {
-                setCoins(prev => prev + (data.earned_coins || 0));
-                setUser(prev => ({ ...prev, xp: (prev.xp || 0) + (data.earned_xp || 0) }));
-                if (data.earned_coins > 0 || data.earned_xp > 0) {
-                     setRewardNotification({ coins: data.earned_coins, xp: data.earned_xp });
-                     setTimeout(() => setRewardNotification(null), 3000);
-                }
+            // Обновляем монеты
+            if (data.earned_coins) setCoins(prev => prev + data.earned_coins);
+            
+            // Обновляем XP и Level
+            setUser(prev => {
+                const newLvl = data.new_level || prev.level;
+                if (newLvl > prev.level) setLevelUpNotification(newLvl); // Показываем нотификацию
+                return { 
+                    ...prev, 
+                    xp: data.current_xp !== undefined ? data.current_xp : (prev.xp + (data.earned_xp || 0)),
+                    level: newLvl
+                };
+            });
+
+            if (data.earned_coins > 0 || data.earned_xp > 0) {
+                 setRewardNotification({ coins: data.earned_coins, xp: data.earned_xp });
+                 setTimeout(() => setRewardNotification(null), 3000);
             }
             if (data.new_achievements?.length > 0) {
                 const newAch = data.new_achievements[0];
@@ -213,7 +202,6 @@ const App: React.FC = () => {
       {isSakura && (
           <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
               <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1522383225653-ed111181a951?q=80&w=2076&auto=format&fit=crop')] bg-cover bg-center opacity-20 mix-blend-screen"></div>
-              {/* Анимация частиц сакуры */}
               <div className="absolute top-[-10%] left-[10%] w-4 h-4 bg-pink-300 rounded-full blur-[1px] animate-[bounce_5s_infinite] opacity-60"></div>
           </div>
       )}
@@ -279,7 +267,7 @@ const App: React.FC = () => {
               game={selectedGame} theme={user.activeTheme}
               onBack={handleBackToGrid} 
               onEarnCoins={handleAddCoins}
-              onSpendCoins={(amount) => handleSpendCoins(amount)} // В играх (пока) траты нет, но если будет
+              onSpendCoins={(amount) => handleSpendCoins(amount)}
               onSaveScore={handleSaveScore}
             />
         ) : (
@@ -296,7 +284,7 @@ const App: React.FC = () => {
         )}
       </main>
 
-      <Drawer isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} position="left" title={isShopMode ? "" : "Меню"}>
+      <Drawer isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} position="left" title={isShopMode ? "" : "Меню"} isSakura={isSakura}>
         {isShopMode ? (
           <Shop 
              user={user} coins={coins}
@@ -325,13 +313,14 @@ const App: React.FC = () => {
         )}
       </Drawer>
 
-      <Drawer isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} position="right" title={isSettingsMode ? "" : "Профиль"}>
+      <Drawer isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} position="right" title={isSettingsMode ? "" : "Профиль"} isSakura={isSakura}>
         {isSettingsMode ? (
           <ProfileSettings 
             user={user} coins={coins}
             onUpdateUser={handleUpdateUserWrapper}
-            onSpendCoins={(amount) => handleSpendCoins(amount, undefined, 'name', user.displayName)} // Тут немного хитро: ProfileSettings сам вызывает onSpendCoins, мы передаем функцию-обертку
+            onSpendCoins={(amount) => handleSpendCoins(amount, undefined, 'name', user.displayName)}
             onBack={() => setIsSettingsMode(false)}
+            isSakura={isSakura}
           />
         ) : (
           <div className="flex flex-col h-full animate-in slide-in-from-right">
@@ -344,7 +333,7 @@ const App: React.FC = () => {
             </div>
             <div className="grid grid-cols-2 gap-3 mb-8">
                <div className="bg-white/5 rounded-xl p-3 flex flex-col items-center"><span className="text-2xl font-bold text-yellow-400">{coins}</span><span className="text-xs text-textMuted uppercase">Монеты</span></div>
-               <div className="bg-white/5 rounded-xl p-3 flex flex-col items-center"><span className="text-2xl font-bold text-blue-400">{user.xp}</span><span className="text-xs text-textMuted uppercase">XP</span></div>
+               <div className="bg-white/5 rounded-xl p-3 flex flex-col items-center"><span className="text-2xl font-bold text-blue-400">{user.level}</span><span className="text-xs text-textMuted uppercase">Уровень</span></div>
             </div>
             <div className="space-y-2">
                <button onClick={() => setIsSettingsMode(true)} className="w-full bg-white/5 hover:bg-white/10 p-3 rounded-xl flex items-center gap-3 transition-colors"><Settings size={18} className="text-blue-400" /><span>Настройки аккаунта</span></button>
@@ -352,6 +341,19 @@ const App: React.FC = () => {
           </div>
         )}
       </Drawer>
+
+      {/* Уведомление о повышении уровня */}
+      <AnimatePresence>
+        {levelUpNotification && (
+          <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 flex items-center justify-center z-[200] pointer-events-none">
+             <div className="bg-black/90 p-8 rounded-3xl border-2 border-yellow-400 flex flex-col items-center text-center shadow-[0_0_50px_rgba(250,204,21,0.5)]">
+                 <Trophy size={64} className="text-yellow-400 mb-4 animate-bounce" />
+                 <h2 className="text-3xl font-bold text-white mb-2">НОВЫЙ УРОВЕНЬ!</h2>
+                 <p className="text-xl text-yellow-400 font-bold">Уровень {levelUpNotification}</p>
+             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {achievementNotification && (
