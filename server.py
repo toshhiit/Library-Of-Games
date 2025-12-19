@@ -225,15 +225,12 @@ def start_cmd(message):
             if not user:
                 cursor.execute("INSERT INTO users (tg_id, username) VALUES (%s, %s) RETURNING id", (tg_id, username))
                 new_user_id = cursor.fetchone()[0]
-                # Создаем статы
                 cursor.execute("INSERT INTO stats (user_id, xp, coins, level) VALUES (%s, 0, 1000, 1)", (new_user_id,))
-                # Создаем прогресс
                 cursor.execute("INSERT INTO user_progress (user_id, display_name) VALUES (%s, %s)", (new_user_id, username))
                 conn.commit()
                 bot.send_message(message.chat.id, "Добро пожаловать! Вам начислено 1000 монет 💰", reply_markup=REPLY_KEYBOARD)
             else:
                 user_id = user[0]
-                # Проверка целостности данных
                 cursor.execute("INSERT INTO stats (user_id, xp, coins, level) VALUES (%s, 0, 1000, 1) ON CONFLICT (user_id) DO NOTHING", (user_id,))
                 cursor.execute("INSERT INTO user_progress (user_id, display_name) VALUES (%s, %s) ON CONFLICT (user_id) DO NOTHING", (user_id, username))
                 conn.commit()
@@ -465,7 +462,6 @@ def get_user_info():
             user_data = cursor.fetchone()
 
             if user_data:
-                # Аватарка из Telegram
                 avatar_url = None
                 tg_id = user_data.get('tg_id')
                 if tg_id:
@@ -477,19 +473,17 @@ def get_user_info():
                             avatar_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_info.file_path}"
                     except: pass
 
-                # Достижения
                 cursor.execute("SELECT achievement_id FROM user_achievements WHERE user_id=%s", (user_data['user_id'],))
                 achievements = [row['achievement_id'] for row in cursor.fetchall()]
                 
-                # Создаем записи если их нет
                 if user_data.get('coins') is None:
                     cursor.execute("INSERT INTO stats (user_id, xp, coins, level) VALUES (%s, 0, 1000, 1) ON CONFLICT (user_id) DO NOTHING", (user_data['user_id'],))
                     cursor.execute("INSERT INTO user_progress (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING", (user_data['user_id'],))
                     conn.commit()
                     user_data['coins'] = 1000
                     user_data['xp'] = 0
+                    user_data['level'] = 1
                 
-                # Формируем ответ
                 response = {
                     "success": True,
                     "user_id": user_data['user_id'],
@@ -500,7 +494,6 @@ def get_user_info():
                     "level": user_data['level'],
                     "achievements": achievements,
                     "avatar_url": avatar_url,
-                    # Парсим JSON поля
                     "inventory": json.loads(user_data['inventory']) if user_data.get('inventory') else [],
                     "active_theme": user_data.get('active_theme') or 'default',
                     "has_changed_name": user_data.get('has_changed_name') or False
@@ -531,20 +524,43 @@ def save_score_api():
         if not conn: return jsonify({"success": False, "error": "DB Error"}), 500
 
         with conn.cursor() as cursor:
-            cursor.execute("SELECT u.id, u.tg_id FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.session_id=%s", (session_id,))
+            cursor.execute("""
+                SELECT u.id, u.tg_id, s.xp, s.level 
+                FROM sessions ses 
+                JOIN users u ON u.id = ses.user_id 
+                LEFT JOIN stats s ON s.user_id = u.id
+                WHERE ses.session_id=%s
+            """, (session_id,))
             user_row = cursor.fetchone()
             
             if user_row:
-                user_id, tg_id = user_row
-                now_str = datetime.now(timezone.utc).isoformat()
+                user_id, tg_id = user_row[0], user_row[1]
+                current_xp = user_row[2] or 0
+                current_level = user_row[3] or 1
                 
+                now_str = datetime.now(timezone.utc).isoformat()
                 cursor.execute("INSERT INTO game_scores (user_id, game_id, score, created_at) VALUES (%s, %s, %s, %s)", 
                               (user_id, game_id, score_val, now_str))
                 
                 earned_coins = max(1, int(score_val * 0.1))
                 earned_xp = max(1, int(score_val * 0.5))
                 
-                cursor.execute("UPDATE stats SET coins = coins + %s, xp = xp + %s WHERE user_id = %s", (earned_coins, earned_xp, user_id))
+                # --- ЛОГИКА ПОВЫШЕНИЯ УРОВНЯ ---
+                new_xp = current_xp + earned_xp
+                new_level = current_level
+                xp_needed = new_level * 1000
+                
+                # Пока XP хватает на следующий уровень, повышаем уровень и вычитаем XP
+                while new_xp >= xp_needed:
+                    new_xp -= xp_needed
+                    new_level += 1
+                    xp_needed = new_level * 1000
+                
+                cursor.execute("""
+                    UPDATE stats 
+                    SET coins = coins + %s, xp = %s, level = %s 
+                    WHERE user_id = %s
+                """, (earned_coins, new_xp, new_level, user_id))
                 
                 # Достижения
                 cursor.execute("SELECT achievement_id FROM user_achievements WHERE user_id=%s", (user_id,))
@@ -557,7 +573,6 @@ def save_score_api():
                                       (user_id, rule["id"], date_str))
                         existing_ids.add(rule["id"])
                         new_unlocked.append(rule)
-                        
                         if tg_id:
                             try:
                                 msg = f"🎉 <b>Новое достижение!</b>\n\n🏆 <b>{rule['name']}</b>\n📝 {rule['desc']}"
@@ -566,18 +581,24 @@ def save_score_api():
 
                 conn.commit()
         conn.close()
-        return jsonify({"success": True, "new_achievements": new_unlocked, "earned_coins": earned_coins, "earned_xp": earned_xp})
+        return jsonify({
+            "success": True, 
+            "new_achievements": new_unlocked, 
+            "earned_coins": earned_coins, 
+            "earned_xp": earned_xp,
+            "new_level": new_level,
+            "current_xp": new_xp
+        })
     except Exception as e:
         print(f"Save Score Error: {e}")
         return jsonify({"success": False}), 500
 
-# --- НОВОЕ API ДЛЯ ПОКУПОК И НАСТРОЕК ---
 @app.post("/api/user/update")
 def update_user_api():
     data = request.get_json()
     session_id = data.get("session")
-    action = data.get("action") # 'buy', 'set_theme', 'change_name'
-    payload = data.get("payload") # {item_id, price} or {theme} or {name, price}
+    action = data.get("action")
+    payload = data.get("payload")
 
     if not session_id or not action: return jsonify({"success": False})
 
@@ -586,7 +607,6 @@ def update_user_api():
         if not conn: return jsonify({"success": False})
 
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            # Получаем ID юзера
             cursor.execute("""
                 SELECT u.id, s.coins, p.inventory, p.has_changed_name
                 FROM sessions ses
@@ -637,7 +657,6 @@ def update_user_api():
                             cursor.execute("UPDATE user_progress SET display_name=%s, has_changed_name=TRUE WHERE user_id=%s", (new_name, user_id))
                             success = True
                     else:
-                        # Бесплатно (первый раз)
                         if not user['has_changed_name']:
                             cursor.execute("UPDATE user_progress SET display_name=%s, has_changed_name=TRUE WHERE user_id=%s", (new_name, user_id))
                             success = True
