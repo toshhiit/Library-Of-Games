@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { ShopItem, UserProfile } from '../types';
 import { SHOP_ITEMS } from '../constants';
@@ -8,7 +7,8 @@ import { motion } from 'framer-motion';
 interface ShopProps {
   user: UserProfile;
   coins: number;
-  onSpendCoins: (amount: number) => boolean;
+  // Исправляем сигнатуру функции: теперь она принимает itemId
+  onSpendCoins: (amount: number, itemId: string) => boolean; 
   onUpdateUser: (updates: Partial<UserProfile>) => void;
   onBack: () => void;
 }
@@ -36,7 +36,8 @@ const Shop: React.FC<ShopProps> = ({ user, coins, onSpendCoins, onUpdateUser, on
 
     // Purchase logic
     if (coins >= item.price) {
-      if (onSpendCoins(item.price)) {
+      // Передаем ID товара при покупке
+      if (onSpendCoins(item.price, item.id)) {
         if (item.type === 'theme') {
            onUpdateUser({ 
              inventory: [...user.inventory, item.id],
