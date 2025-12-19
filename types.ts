@@ -7,7 +7,6 @@ export interface Achievement {
   icon: string;
 }
 
-// Добавляем новый интерфейс для управления
 export interface GameControl {
   type: 'arrows' | 'space' | 'mouse' | 'click' | 'drag';
   description: string;
@@ -19,7 +18,7 @@ export interface Game {
   image: string;
   category: 'single' | 'multi';
   description: string;
-  controls: GameControl[]; // <-- Новое поле
+  controls: GameControl[]; 
 }
 
 export type FilterType = 'all' | 'single' | 'multi' | 'favorites';
@@ -55,6 +54,8 @@ export interface UserProfile {
   activeBoosts: string[];
   hasChangedName: boolean;
   achievements: string[];
+  xp: number;    // <--- Добавлено
+  level: number; // <--- Добавлено
 }
 
 // Telegram Web App Types
