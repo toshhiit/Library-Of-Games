@@ -7,6 +7,7 @@ import uuid
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import os
+import json
 from urllib.parse import urlparse
 from datetime import datetime, timezone, timedelta
 
@@ -42,7 +43,6 @@ ACHIEVEMENTS_RULES = [
     {"id": "clicker_fast", "game_id": "4", "score": 200, "name": "Быстрые пальцы", "desc": "200 кликов за минуту"},
 ]
 
-# Обновленная клавиатура с кнопкой достижений
 REPLY_KEYBOARD = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
 REPLY_KEYBOARD.add(types.KeyboardButton("🎮 Играть"))
 REPLY_KEYBOARD.add(types.KeyboardButton("👤 Профиль"), types.KeyboardButton("🏅 Достижения"))
@@ -72,7 +72,6 @@ def get_db_connection():
         print(f"DB Connection Error: {e}")
         return None
 
-# Функция инициализации таблиц
 def init_db():
     try:
         conn = get_db_connection()
@@ -81,6 +80,7 @@ def init_db():
             return
         
         with conn.cursor() as cursor:
+            # Основные таблицы
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     id SERIAL PRIMARY KEY,
@@ -96,6 +96,16 @@ def init_db():
                     coins INTEGER DEFAULT 1000,
                     level INTEGER DEFAULT 1,
                     CONSTRAINT unique_user_stats UNIQUE (user_id)
+                );
+            """)
+            # Таблица прогресса (инвентарь, тема, настройки)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_progress (
+                    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE PRIMARY KEY,
+                    inventory TEXT DEFAULT '[]',
+                    active_theme TEXT DEFAULT 'default',
+                    has_changed_name BOOLEAN DEFAULT FALSE,
+                    display_name TEXT
                 );
             """)
             cursor.execute("""
@@ -153,10 +163,10 @@ def clear_db_cmd(message):
         conn = get_db_connection()
         if conn:
             with conn.cursor() as cursor:
-                cursor.execute("TRUNCATE TABLE game_scores, user_achievements, auth_tokens, sessions, stats, users RESTART IDENTITY CASCADE;")
+                cursor.execute("TRUNCATE TABLE game_scores, user_achievements, auth_tokens, sessions, stats, users, user_progress RESTART IDENTITY CASCADE;")
                 conn.commit()
             conn.close()
-            bot.reply_to(message, "🗑️ База данных полностью очищена (все пользователи и прогресс удалены).")
+            bot.reply_to(message, "🗑️ База данных полностью очищена.")
         else:
             bot.reply_to(message, "Ошибка подключения к БД.")
     except Exception as e:
@@ -215,15 +225,18 @@ def start_cmd(message):
             if not user:
                 cursor.execute("INSERT INTO users (tg_id, username) VALUES (%s, %s) RETURNING id", (tg_id, username))
                 new_user_id = cursor.fetchone()[0]
+                # Создаем статы
                 cursor.execute("INSERT INTO stats (user_id, xp, coins, level) VALUES (%s, 0, 1000, 1)", (new_user_id,))
+                # Создаем прогресс
+                cursor.execute("INSERT INTO user_progress (user_id, display_name) VALUES (%s, %s)", (new_user_id, username))
                 conn.commit()
                 bot.send_message(message.chat.id, "Добро пожаловать! Вам начислено 1000 монет 💰", reply_markup=REPLY_KEYBOARD)
             else:
                 user_id = user[0]
-                cursor.execute("SELECT id FROM stats WHERE user_id=%s", (user_id,))
-                if not cursor.fetchone():
-                     cursor.execute("INSERT INTO stats (user_id, xp, coins, level) VALUES (%s, 0, 1000, 1)", (user_id,))
-                     conn.commit()
+                # Проверка целостности данных
+                cursor.execute("INSERT INTO stats (user_id, xp, coins, level) VALUES (%s, 0, 1000, 1) ON CONFLICT (user_id) DO NOTHING", (user_id,))
+                cursor.execute("INSERT INTO user_progress (user_id, display_name) VALUES (%s, %s) ON CONFLICT (user_id) DO NOTHING", (user_id, username))
+                conn.commit()
                 bot.send_message(message.chat.id, "С возвращением! Выбери действие:", reply_markup=REPLY_KEYBOARD)
         conn.close()
     except Exception as e:
@@ -244,17 +257,19 @@ def profile_cmd(message):
 
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute("""
-                SELECT u.username, s.coins, s.xp, s.level 
+                SELECT u.username, s.coins, s.xp, s.level, p.display_name 
                 FROM users u
                 LEFT JOIN stats s ON u.id = s.user_id
+                LEFT JOIN user_progress p ON u.id = p.user_id
                 WHERE u.tg_id = %s
             """, (tg_id,))
             user_data = cursor.fetchone()
             
             if user_data:
+                name = user_data.get('display_name') or user_data.get('username') or "Игрок"
                 text = (
                     f"👤 *Твой Профиль*\n\n"
-                    f"🆔 *Имя*: {user_data.get('username', 'Игрок')}\n"
+                    f"🆔 *Имя*: {name}\n"
                     f"📊 *Уровень*: {user_data.get('level', 1)}\n"
                     f"⭐ *Опыт (XP)*: {user_data.get('xp', 0)}\n"
                     f"💰 *Монеты*: {user_data.get('coins', 1000)}"
@@ -274,30 +289,22 @@ def achievements_cmd(message):
         if not conn: return
 
         with conn.cursor() as cursor:
-            # Получаем ID пользователя
             cursor.execute("SELECT id FROM users WHERE tg_id=%s", (tg_id,))
             row = cursor.fetchone()
-            if not row:
-                bot.send_message(message.chat.id, "Сначала нажми /start")
-                conn.close()
-                return
-            
+            if not row: return
             user_id = row[0]
             
-            # Получаем уже открытые достижения
             cursor.execute("SELECT achievement_id FROM user_achievements WHERE user_id=%s", (user_id,))
             unlocked_ids = {r[0] for r in cursor.fetchall()}
             
             response_text = "🏅 *Ваши достижения:*\n\n"
-            
             for rule in ACHIEVEMENTS_RULES:
                 status = "✅" if rule['id'] in unlocked_ids else "🔒"
                 response_text += f"{status} *{rule['name']}*\n_{rule['desc']}_\n\n"
             
             bot.send_message(message.chat.id, response_text, parse_mode='Markdown', reply_markup=REPLY_KEYBOARD)
         conn.close()
-    except Exception as e:
-        print(f"Error in achievements_cmd: {e}")
+    except Exception: pass
 
 @bot.message_handler(commands=['stats'])
 @bot.message_handler(func=lambda message: message.text == "🏆 Моя Статистика")
@@ -445,49 +452,62 @@ def get_user_info():
         if not conn: return jsonify({"success": False})
 
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            # Получаем данные пользователя
             cursor.execute("""
-                SELECT u.id as user_id, u.username, u.tg_id, s.coins, s.xp 
+                SELECT u.id as user_id, u.username, u.tg_id, 
+                       s.coins, s.xp, s.level,
+                       p.inventory, p.active_theme, p.has_changed_name, p.display_name
                 FROM sessions ses
                 JOIN users u ON u.id = ses.user_id
                 LEFT JOIN stats s ON s.user_id = u.id
+                LEFT JOIN user_progress p ON p.user_id = u.id
                 WHERE ses.session_id=%s
             """, (session_id,))
             user_data = cursor.fetchone()
 
             if user_data:
-                # --- ПОЛУЧАЕМ АВАТАРКУ ИЗ TELEGRAM ---
+                # Аватарка из Telegram
                 avatar_url = None
                 tg_id = user_data.get('tg_id')
                 if tg_id:
                     try:
-                        # Запрашиваем фото у Telegram API
                         photos = bot.get_user_profile_photos(tg_id, limit=1)
                         if photos.total_count > 0:
-                            # Берем самую маленькую версию для скорости (или [-1] для качества)
                             file_id = photos.photos[0][0].file_id 
                             file_info = bot.get_file(file_id)
-                            # Генерируем прямую ссылку на файл
                             avatar_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_info.file_path}"
-                    except Exception as e:
-                        print(f"Failed to fetch avatar: {e}")
+                    except: pass
 
-                # Подтягиваем достижения
+                # Достижения
                 cursor.execute("SELECT achievement_id FROM user_achievements WHERE user_id=%s", (user_data['user_id'],))
                 achievements = [row['achievement_id'] for row in cursor.fetchall()]
                 
-                # Создаем статы если их нет (защита от сбоев)
+                # Создаем записи если их нет
                 if user_data.get('coins') is None:
                     cursor.execute("INSERT INTO stats (user_id, xp, coins, level) VALUES (%s, 0, 1000, 1) ON CONFLICT (user_id) DO NOTHING", (user_data['user_id'],))
+                    cursor.execute("INSERT INTO user_progress (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING", (user_data['user_id'],))
                     conn.commit()
                     user_data['coins'] = 1000
                     user_data['xp'] = 0
-
-                user_data['achievements'] = achievements
-                user_data['avatar_url'] = avatar_url # Добавляем ссылку в ответ
+                
+                # Формируем ответ
+                response = {
+                    "success": True,
+                    "user_id": user_data['user_id'],
+                    "username": user_data.get('display_name') or user_data['username'],
+                    "tg_id": user_data['tg_id'],
+                    "coins": user_data['coins'],
+                    "xp": user_data['xp'],
+                    "level": user_data['level'],
+                    "achievements": achievements,
+                    "avatar_url": avatar_url,
+                    # Парсим JSON поля
+                    "inventory": json.loads(user_data['inventory']) if user_data.get('inventory') else [],
+                    "active_theme": user_data.get('active_theme') or 'default',
+                    "has_changed_name": user_data.get('has_changed_name') or False
+                }
+                return jsonify(response)
 
         conn.close()
-        if user_data: return jsonify({"success": True, **user_data})
         return jsonify({"success": False})
     except Exception as e:
         print(f"User API Error: {e}")
@@ -518,22 +538,15 @@ def save_score_api():
                 user_id, tg_id = user_row
                 now_str = datetime.now(timezone.utc).isoformat()
                 
-                # 1. Сохраняем рекорд
                 cursor.execute("INSERT INTO game_scores (user_id, game_id, score, created_at) VALUES (%s, %s, %s, %s)", 
                               (user_id, game_id, score_val, now_str))
                 
-                # 2. МГНОВЕННОЕ НАЧИСЛЕНИЕ МОНЕТ И ОПЫТА
-                # 10% очков в монеты, 50% в опыт
                 earned_coins = max(1, int(score_val * 0.1))
                 earned_xp = max(1, int(score_val * 0.5))
                 
-                cursor.execute("""
-                    UPDATE stats 
-                    SET coins = coins + %s, xp = xp + %s 
-                    WHERE user_id = %s
-                """, (earned_coins, earned_xp, user_id))
+                cursor.execute("UPDATE stats SET coins = coins + %s, xp = xp + %s WHERE user_id = %s", (earned_coins, earned_xp, user_id))
                 
-                # 3. Проверка достижений
+                # Достижения
                 cursor.execute("SELECT achievement_id FROM user_achievements WHERE user_id=%s", (user_id,))
                 existing_ids = {row[0] for row in cursor.fetchall()}
                 
@@ -557,6 +570,84 @@ def save_score_api():
     except Exception as e:
         print(f"Save Score Error: {e}")
         return jsonify({"success": False}), 500
+
+# --- НОВОЕ API ДЛЯ ПОКУПОК И НАСТРОЕК ---
+@app.post("/api/user/update")
+def update_user_api():
+    data = request.get_json()
+    session_id = data.get("session")
+    action = data.get("action") # 'buy', 'set_theme', 'change_name'
+    payload = data.get("payload") # {item_id, price} or {theme} or {name, price}
+
+    if not session_id or not action: return jsonify({"success": False})
+
+    try:
+        conn = get_db_connection()
+        if not conn: return jsonify({"success": False})
+
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            # Получаем ID юзера
+            cursor.execute("""
+                SELECT u.id, s.coins, p.inventory, p.has_changed_name
+                FROM sessions ses
+                JOIN users u ON u.id = ses.user_id
+                JOIN stats s ON s.user_id = u.id
+                JOIN user_progress p ON p.user_id = u.id
+                WHERE ses.session_id=%s
+            """, (session_id,))
+            user = cursor.fetchone()
+            
+            if not user:
+                conn.close()
+                return jsonify({"success": False, "error": "User not found"})
+            
+            user_id = user['id']
+            current_coins = user['coins']
+            inventory = json.loads(user['inventory']) if user['inventory'] else []
+
+            success = False
+            new_coins = current_coins
+
+            if action == 'buy':
+                item_id = payload.get('item_id')
+                price = int(payload.get('price', 0))
+                
+                if item_id and item_id not in inventory and current_coins >= price:
+                    new_coins = current_coins - price
+                    inventory.append(item_id)
+                    cursor.execute("UPDATE stats SET coins=%s WHERE user_id=%s", (new_coins, user_id))
+                    cursor.execute("UPDATE user_progress SET inventory=%s WHERE user_id=%s", (json.dumps(inventory), user_id))
+                    success = True
+
+            elif action == 'set_theme':
+                theme = payload.get('theme')
+                if theme:
+                    cursor.execute("UPDATE user_progress SET active_theme=%s WHERE user_id=%s", (theme, user_id))
+                    success = True
+
+            elif action == 'change_name':
+                new_name = payload.get('name')
+                price = int(payload.get('price', 0))
+                
+                if new_name and len(new_name) >= 3:
+                    if price > 0:
+                        if current_coins >= price:
+                            new_coins = current_coins - price
+                            cursor.execute("UPDATE stats SET coins=%s WHERE user_id=%s", (new_coins, user_id))
+                            cursor.execute("UPDATE user_progress SET display_name=%s, has_changed_name=TRUE WHERE user_id=%s", (new_name, user_id))
+                            success = True
+                    else:
+                        # Бесплатно (первый раз)
+                        if not user['has_changed_name']:
+                            cursor.execute("UPDATE user_progress SET display_name=%s, has_changed_name=TRUE WHERE user_id=%s", (new_name, user_id))
+                            success = True
+
+            conn.commit()
+            return jsonify({"success": success, "coins": new_coins})
+
+    except Exception as e:
+        print(f"Update API Error: {e}")
+        return jsonify({"success": False})
 
 if __name__ == "__main__":
     if BOT_TOKEN: 
