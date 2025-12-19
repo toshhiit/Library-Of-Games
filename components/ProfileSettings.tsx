@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
-import { Save, Check, AlertCircle, Coins, ArrowLeft, Trophy, Lock } from 'lucide-react'; 
+import { Save, Check, AlertCircle, Coins, ArrowLeft, Trophy, Lock, Star } from 'lucide-react'; 
 import { ACHIEVEMENTS_LIST } from '../constants'; 
+import { motion } from 'framer-motion';
 
 interface ProfileSettingsProps {
   user: UserProfile;
@@ -9,13 +10,15 @@ interface ProfileSettingsProps {
   onUpdateUser: (updates: Partial<UserProfile>) => void;
   onSpendCoins: (amount: number) => boolean;
   onBack: () => void;
+  isSakura?: boolean; // Добавили поддержку темы
 }
 
 const ProfileSettings: React.FC<ProfileSettingsProps> = ({ 
   user, 
   onUpdateUser, 
   onSpendCoins, 
-  onBack 
+  onBack,
+  isSakura
 }) => {
   const [name, setName] = useState(user.displayName);
   const [error, setError] = useState<string | null>(null);
@@ -32,11 +35,9 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
     }
 
     if (!user.hasChangedName) {
-      // Free change
       onUpdateUser({ displayName: name, hasChangedName: true });
       setSuccessMsg('Имя успешно изменено (бесплатно)');
     } else {
-      // Paid change
       if (onSpendCoins(5000)) {
         onUpdateUser({ displayName: name });
         setSuccessMsg('Имя успешно изменено (-5000 монет)');
@@ -45,6 +46,15 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
       }
     }
   };
+
+  // Расчет уровня
+  const currentLevel = user.level || 1;
+  const currentXp = user.xp || 0;
+  const xpForNextLevel = currentLevel * 1000;
+  const progressPercent = Math.min((currentXp / xpForNextLevel) * 100, 100);
+
+  const bgClass = isSakura ? 'bg-pink-900/40 border-pink-500/20' : 'bg-white/5 border-white/5';
+  const inputClass = isSakura ? 'bg-pink-900/60 border-pink-500/30 focus:border-pink-400' : 'bg-panel border-white/10 focus:border-yellow-400';
 
   return (
     <div className="flex flex-col h-full animate-in slide-in-from-right duration-300">
@@ -57,14 +67,34 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
 
       <div className="space-y-8 overflow-y-auto pb-4 pr-2 custom-scrollbar">
         
+        {/* --- LEVEL PROGRESS BAR --- */}
+        <div className={`p-4 rounded-xl border ${bgClass}`}>
+             <div className="flex justify-between items-center mb-2">
+                 <div className="flex items-center gap-2">
+                     <Star size={18} className="text-yellow-400 fill-yellow-400" />
+                     <span className="font-bold">Уровень {currentLevel}</span>
+                 </div>
+                 <span className="text-xs text-textMuted">{currentXp} / {xpForNextLevel} XP</span>
+             </div>
+             
+             <div className="h-3 w-full bg-black/30 rounded-full overflow-hidden border border-white/5">
+                 <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progressPercent}%` }}
+                    transition={{ duration: 1, ease: "easeOut" }}
+                    className={`h-full rounded-full ${isSakura ? 'bg-gradient-to-r from-pink-400 to-rose-500' : 'bg-gradient-to-r from-blue-400 to-purple-500'}`}
+                 />
+             </div>
+             <p className="text-[10px] text-textMuted mt-2 text-center">Играйте в игры, чтобы повышать уровень!</p>
+        </div>
+
         {/* Telegram Username */}
         <div className="space-y-2">
           <label className="text-xs text-textMuted font-bold uppercase">Telegram Username</label>
-          <div className="w-full p-3 bg-white/5 border border-white/5 rounded-xl text-textMuted flex items-center justify-between">
+          <div className={`w-full p-3 rounded-xl text-textMuted flex items-center justify-between border ${bgClass}`}>
             <span>{user.tgUsername}</span>
             <span className="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-1 rounded">TG</span>
           </div>
-          <p className="text-[10px] text-textMuted">Берется из Telegram аккаунта, нельзя изменить.</p>
         </div>
 
         {/* Display Name */}
@@ -75,7 +105,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
               type="text" 
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="flex-1 bg-panel border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-yellow-400 transition-colors"
+              className={`flex-1 border rounded-xl px-4 py-3 focus:outline-none transition-colors ${inputClass}`}
             />
             <button 
               onClick={handleSaveName}
@@ -100,7 +130,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
         {/* Avatar Display */}
         <div className="space-y-3">
            <label className="text-xs text-textMuted font-bold uppercase">Аватар</label>
-           <div className="p-4 bg-white/5 rounded-xl flex items-center gap-4 border border-white/5">
+           <div className={`p-4 rounded-xl flex items-center gap-4 border ${bgClass}`}>
               <img 
                 src={user.avatar} 
                 alt="Current Avatar" 
@@ -114,7 +144,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
            </div>
         </div>
 
-        {/* --- СЕКЦИЯ ДОСТИЖЕНИЙ --- */}
+        {/* --- ACHIEVEMENTS --- */}
         <div className="space-y-3 pt-4 border-t border-white/10">
            <label className="text-xs text-textMuted font-bold uppercase flex items-center gap-2">
               <Trophy size={14} className="text-yellow-500" />
@@ -124,13 +154,12 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
            <div className="grid grid-cols-1 gap-2">
               {ACHIEVEMENTS_LIST.map(ach => {
                   const isUnlocked = user.achievements?.includes(ach.id);
-                  
                   return (
                       <div 
                         key={ach.id} 
                         className={`p-3 rounded-xl border flex items-center gap-3 transition-colors ${
                             isUnlocked 
-                                ? 'bg-yellow-500/10 border-yellow-500/20' 
+                                ? (isSakura ? 'bg-pink-500/10 border-pink-500/20' : 'bg-yellow-500/10 border-yellow-500/20')
                                 : 'bg-white/5 border-white/5 opacity-50'
                         }`}
                       >
@@ -154,7 +183,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
            </div>
         </div>
 
-        {/* Feedback Messages */}
+        {/* Messages */}
         {error && (
           <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-400 text-sm">
             <AlertCircle size={16} />
